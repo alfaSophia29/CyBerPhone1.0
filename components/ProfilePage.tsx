@@ -1,24 +1,22 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, UserType, Post, Store, AffiliateSale, Product, TransactionType, PaymentCard } from '../types';
+import { User, UserType, Post } from '../types';
 import {
   findUserById,
-  updateUser,
   getPosts,
-  updateUserBalance,
-  saveStores,
-  pinPost,
-  unpinPost,
   toggleFollowUser,
-  getAffiliateSales,
-  findProductById,
-  addProductRating,
-  requestDebitCard,
 } from '../services/storageService';
-import { generateProfileDescription, generateImageFromPrompt } from '../services/geminiService';
-import { MIN_WITHDRAWAL_USD, DEFAULT_PROFILE_PIC, MIN_AI_FILTER_USD_COST } from '../constants';
+import { DEFAULT_PROFILE_PIC } from '../constants';
 import PostCard from './PostCard';
-import { StarIcon, CreditCardIcon, QrCodeIcon, DocumentTextIcon, BanknotesIcon, ArrowPathIcon, WalletIcon, IdentificationIcon, ShoppingBagIcon, CalendarIcon, ChevronRightIcon, PlusIcon, MinusIcon } from '@heroicons/react/24/solid';
+import PurchasesPage from './PurchasesPage';
+import EventsPage from './EventsPage';
+import AffiliatesPage from './AffiliatesPage';
+import { 
+  StarIcon, CalendarIcon, Cog8ToothIcon, 
+  ShoppingBagIcon, NewspaperIcon, CurrencyDollarIcon,
+  UserPlusIcon, UserMinusIcon, CheckBadgeIcon,
+  UsersIcon, HeartIcon, ChartBarIcon
+} from '@heroicons/react/24/solid';
 
 interface ProfilePageProps {
   currentUser: User;
@@ -27,33 +25,24 @@ interface ProfilePageProps {
   userId?: string;
 }
 
+type ProfileTab = 'feed' | 'events' | 'purchases' | 'affiliates';
+
 const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onNavigate, refreshUser, userId }) => {
   const profileOwnerId = userId || currentUser.id;
   const isCurrentUserProfile = profileOwnerId === currentUser.id;
   const [profileOwner, setProfileOwner] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [tempBio, setTempBio] = useState('');
-  const [tempProfilePicture, setTempProfilePicture] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState<number | ''>('');
-  const [depositAmount, setDepositAmount] = useState<number | ''>('');
-  const [showDepositModal, setShowDepositModal] = useState(false);
-  const [showCardForm, setShowCardForm] = useState(false);
-  const [depositStep, setDepositStep] = useState<'amount' | 'method' | 'processing' | 'success'>('amount');
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'boleto' | null>(null);
   const [ownerPosts, setOwnerPosts] = useState<Post[]>([]);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('feed');
 
-  // Form para solicitar cartão
-  const [cardHolder, setCardHolder] = useState(`${currentUser.firstName} ${currentUser.lastName}`);
+  const isFollowing = currentUser.followedUsers.includes(profileOwnerId);
 
   const fetchProfileData = useCallback(() => {
     setLoading(true);
     const owner = findUserById(profileOwnerId);
     if (owner) {
       setProfileOwner(owner);
-      setTempBio(owner.bio || '');
-      setTempProfilePicture(owner.profilePicture || '');
-      const posts = getPosts().filter((p) => p.userId === owner.id).sort((a, b) => (a.isPinned ? -1 : 1));
+      const posts = getPosts().filter((p) => p.userId === owner.id);
       setOwnerPosts(posts);
     }
     setLoading(false);
@@ -61,312 +50,186 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ currentUser, onNavigate, refr
 
   useEffect(() => { fetchProfileData(); }, [fetchProfileData]);
 
-  const handleDeposit = () => {
-    if (depositAmount === '' || depositAmount <= 0) return;
-    setDepositStep('processing');
-    setTimeout(() => {
-      updateUserBalance(currentUser.id, Number(depositAmount), 'Depósito via plataforma');
-      refreshUser();
-      fetchProfileData();
-      setDepositStep('success');
-    }, 1500);
-  };
+  if (loading || !profileOwner) return (
+    <div className="min-h-[80vh] flex items-center justify-center dark:bg-darkbg">
+      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
 
-  const handleWithdrawal = () => {
-    if (!profileOwner || withdrawAmount === '' || withdrawAmount < MIN_WITHDRAWAL_USD) return;
-    if ((profileOwner.balance || 0) < Number(withdrawAmount)) {
-      alert("Saldo insuficiente.");
-      return;
-    }
-    updateUserBalance(profileOwner.id, -Number(withdrawAmount), 'Resgate de saldo');
-    refreshUser();
-    fetchProfileData();
-    setWithdrawAmount('');
-    alert("Saque solicitado com sucesso!");
-  };
-
-  const handleRequestCard = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newCard: PaymentCard = {
-      cardNumber: `**** **** **** ${Math.floor(1000 + Math.random() * 9000)}`,
-      holderName: cardHolder.toUpperCase(),
-      expiryDate: '12/29',
-      cvv: '***',
-      type: 'DEBIT'
-    };
-    requestDebitCard(currentUser.id, newCard);
-    setShowCardForm(false);
-    refreshUser();
-    fetchProfileData();
-    alert('Seu cartão de débito digital foi gerado e o físico será enviado para seu endereço!');
-  };
-
-  if (loading || !profileOwner) return <div className="pt-24 text-center">Carregando perfil...</div>;
+  const tabs = [
+    { id: 'feed', label: 'Feed', icon: NewspaperIcon },
+    { id: 'events', label: 'Eventos', icon: CalendarIcon },
+    { id: 'purchases', label: 'Compras', icon: ShoppingBagIcon },
+    ...(profileOwner.userType === UserType.CREATOR || isCurrentUserProfile ? [{ id: 'affiliates', label: 'Painel', icon: CurrencyDollarIcon }] : [])
+  ];
 
   return (
-    <div className="container mx-auto p-4 md:p-8 pt-24 pb-20">
-      {/* Cabeçalho do Perfil */}
-      <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 mb-8">
-        <div className="h-48 bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-600 relative">
-          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          <img src={tempProfilePicture || DEFAULT_PROFILE_PIC} className="absolute -bottom-16 left-8 w-32 h-32 rounded-3xl border-4 border-white shadow-2xl object-cover transform transition-transform hover:scale-105" />
-        </div>
-        <div className="pt-20 px-8 pb-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-4xl font-black text-gray-900">{profileOwner.firstName} {profileOwner.lastName}</h2>
-              <span className={`inline-flex items-center mt-2 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${profileOwner.userType === UserType.CREATOR ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                {profileOwner.userType === UserType.CREATOR ? 'CONTA CREATOR' : 'CONTA STANDARD'}
-              </span>
-            </div>
-            {isCurrentUserProfile && (
-              <button onClick={() => setIsEditing(!isEditing)} className="bg-gray-900 hover:bg-black text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg active:scale-95">
-                {isEditing ? 'Salvar Perfil' : 'Editar Perfil'}
-              </button>
-            )}
-          </div>
-          <div className="mt-8">
-            <h3 className="text-gray-400 font-bold uppercase text-xs tracking-[0.2em] mb-3">Sobre</h3>
-            {isEditing ? (
-              <textarea value={tempBio} onChange={e => setTempBio(e.target.value)} className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-blue-500 outline-none transition-all" rows={3} />
-            ) : (
-              <p className="text-gray-700 text-lg leading-relaxed max-w-2xl">{profileOwner.bio || 'Este usuário ainda não definiu uma biografia.'}</p>
-            )}
-          </div>
-        </div>
+    <div className="w-full min-h-screen bg-white dark:bg-darkbg transition-colors duration-500 overflow-x-hidden">
+      {/* Visual Header / Cover */}
+      <div className="relative w-full h-36 md:h-72 bg-gradient-to-br from-blue-700 via-indigo-600 to-purple-800">
+        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+        
+        {isCurrentUserProfile && (
+          <button 
+            onClick={() => onNavigate('settings')}
+            className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur-xl text-white rounded-xl border border-white/10 z-10 active:scale-95"
+          >
+            <Cog8ToothIcon className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      {isCurrentUserProfile && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          {/* Sessão Carteira Bancária */}
-          <div className="lg:col-span-2 space-y-8">
-            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-50">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black text-gray-800 flex items-center gap-3">
-                  <WalletIcon className="h-8 w-8 text-blue-600" /> Minha Carteira
-                </h3>
-                <div className="text-right">
-                  <p className="text-gray-400 text-xs font-bold uppercase">Saldo Disponível</p>
-                  <p className="text-4xl font-black text-gray-900">${(profileOwner.balance || 0).toFixed(2)}</p>
+      {/* Profile Core Info */}
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="relative -mt-16 md:-mt-24 mb-6 md:mb-10">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-10">
+            {/* Avatar */}
+            <div className="relative group shrink-0">
+              <div className="absolute -inset-1 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-[2.5rem] md:rounded-[3.2rem] blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+              <img 
+                src={profileOwner.profilePicture || DEFAULT_PROFILE_PIC} 
+                className="relative w-32 h-32 md:w-52 md:h-52 rounded-[2.2rem] md:rounded-[3rem] border-[4px] md:border-[8px] border-white dark:border-darkcard shadow-2xl object-cover bg-white" 
+              />
+              {profileOwner.userType === UserType.CREATOR && (
+                <div className="absolute bottom-2 right-2 bg-blue-600 p-1.5 rounded-xl border-2 border-white dark:border-darkcard shadow-lg">
+                  <CheckBadgeIcon className="h-4 w-4 md:h-6 md:w-6 text-white" />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <button onClick={() => { setDepositStep('amount'); setShowDepositModal(true); }} className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-lg shadow-blue-200 shadow-lg transition-all active:scale-95">
-                  <BanknotesIcon className="h-6 w-6" /> Adicionar Saldo
-                </button>
-                <button onClick={() => {}} className="flex items-center justify-center gap-3 bg-gray-100 hover:bg-gray-200 text-gray-800 py-4 rounded-2xl font-black text-lg transition-all active:scale-95">
-                  <ArrowPathIcon className="h-6 w-6" /> Transferir
-                </button>
-              </div>
-
-              {/* Histórico de Transações */}
-              <div className="mt-10">
-                <h4 className="text-gray-400 font-bold uppercase text-xs tracking-widest mb-4 flex justify-between">
-                  <span>Últimas Movimentações</span>
-                  <button className="text-blue-600 normal-case hover:underline">Ver tudo</button>
-                </h4>
-                <div className="space-y-3">
-                  {(!profileOwner.transactions || profileOwner.transactions.length === 0) ? (
-                    <div className="py-8 text-center border-2 border-dashed border-gray-100 rounded-2xl">
-                      <p className="text-gray-400 font-medium">Nenhuma transação registrada.</p>
-                    </div>
-                  ) : (
-                    profileOwner.transactions.slice(0, 5).map(trx => (
-                      <div key={trx.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-white hover:border-gray-100 transition-all">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-xl ${trx.type === TransactionType.DEPOSIT ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                            {trx.type === TransactionType.DEPOSIT ? <PlusIcon className="h-5 w-5" /> : <MinusIcon className="h-5 w-5" />}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-800">{trx.description}</p>
-                            <p className="text-xs text-gray-400">{new Date(trx.timestamp).toLocaleString()}</p>
-                          </div>
-                        </div>
-                        <p className={`font-black text-lg ${trx.type === TransactionType.DEPOSIT ? 'text-green-600' : 'text-red-600'}`}>
-                          {trx.type === TransactionType.DEPOSIT ? '+' : '-'}${trx.amount.toFixed(2)}
-                        </p>
-                      </div>
-                    ))
+              )}
+            </div>
+            
+            {/* Identity & Actions */}
+            <div className="flex-1 text-center md:text-left w-full">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-6">
+                <div>
+                  <h2 className="text-2xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tighter leading-tight">
+                    {profileOwner.firstName} {profileOwner.lastName}
+                  </h2>
+                  <p className="text-blue-600 dark:text-blue-400 text-[10px] md:text-xs font-black uppercase tracking-[0.2em] mt-1">
+                    {profileOwner.userType === UserType.CREATOR ? 'Professor Autor' : 'Membro CyBer'}
+                  </p>
+                </div>
+                
+                <div className="flex items-center justify-center md:justify-end gap-2 w-full md:w-auto">
+                  {!isCurrentUserProfile && (
+                    <button 
+                      onClick={() => { toggleFollowUser(currentUser.id, profileOwnerId); refreshUser(); fetchProfileData(); }} 
+                      className={`flex-1 md:flex-none px-8 py-3 rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95 ${isFollowing ? 'bg-gray-100 text-gray-400 dark:bg-white/5' : 'bg-blue-600 text-white shadow-blue-500/20'}`}
+                    >
+                      {isFollowing ? 'Seguindo' : 'Seguir Perfil'}
+                    </button>
+                  )}
+                  {isCurrentUserProfile && (
+                    <button onClick={() => onNavigate('settings')} className="flex-1 md:flex-none px-8 py-3 bg-gray-900 dark:bg-white dark:text-black text-white rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest active:scale-95">
+                      Editar Perfil
+                    </button>
                   )}
                 </div>
               </div>
+
+              {/* Statistics Grid */}
+              <div className="flex items-center justify-center md:justify-start gap-8 md:gap-14 mb-4 py-4 border-y md:border-none border-gray-50 dark:border-white/5">
+                <div className="flex flex-col items-center md:items-start">
+                  <span className="text-lg md:text-2xl font-black text-gray-900 dark:text-white">{ownerPosts.length}</span>
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Posts</span>
+                </div>
+                <div className="flex flex-col items-center md:items-start">
+                  <span className="text-lg md:text-2xl font-black text-gray-900 dark:text-white">{(profileOwner.followedUsers?.length || 0) * 8 + 12}</span>
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Alunos</span>
+                </div>
+                <div className="flex flex-col items-center md:items-start">
+                  <span className="text-lg md:text-2xl font-black text-gray-900 dark:text-white">{(profileOwner.followedUsers?.length || 0)}</span>
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Seguindo</span>
+                </div>
+              </div>
+
+              <p className="text-gray-500 dark:text-gray-400 font-medium text-xs md:text-lg leading-relaxed italic max-w-2xl mx-auto md:mx-0">
+                "{profileOwner.bio || 'Criando o futuro da educação no CyBerPhone.'}"
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* Cartão de Pagamento */}
-          <div className="space-y-8">
-            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-50 flex flex-col items-center">
-              <h3 className="text-xl font-black text-gray-800 mb-6 self-start">Cartão CyBerPhone</h3>
+        {/* Responsive Tab Nav - Sticky with horizontal scroll on mobile */}
+        <div className="sticky top-[72px] z-30 -mx-4 md:mx-0 mb-6 bg-white/90 dark:bg-darkcard/90 backdrop-blur-xl md:rounded-[2rem] border-b md:border border-gray-100 dark:border-white/5 shadow-sm overflow-x-auto no-scrollbar">
+          <div className="flex items-center min-w-max md:justify-center p-2 gap-1">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as ProfileTab)}
+                className={`flex items-center gap-2 py-2.5 px-5 rounded-xl md:rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                  activeTab === tab.id 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'text-gray-400 hover:text-blue-600 hover:bg-gray-50 dark:hover:bg-white/5'
+                }`}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Grid Content */}
+        <div className="pb-20 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
+            
+            {/* Content Area */}
+            <div className="lg:col-span-8 space-y-6">
+              {activeTab === 'feed' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  {ownerPosts.length === 0 ? (
+                    <div className="col-span-full py-20 text-center bg-gray-50 dark:bg-white/5 rounded-[2.5rem] border-2 border-dashed border-gray-100 dark:border-white/5">
+                      <NewspaperIcon className="h-12 w-12 text-gray-200 mx-auto mb-4" />
+                      <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Sem publicações ainda</p>
+                    </div>
+                  ) : (
+                    ownerPosts.map(post => (
+                      <PostCard 
+                        key={post.id} post={post} currentUser={currentUser} 
+                        onNavigate={onNavigate} onFollowToggle={() => {}} 
+                        refreshUser={refreshUser} onPostUpdatedOrDeleted={fetchProfileData} onPinToggle={() => {}} 
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+              {activeTab === 'events' && <EventsPage currentUser={currentUser} />}
+              {activeTab === 'purchases' && <PurchasesPage currentUser={currentUser} onNavigate={onNavigate} />}
+              {activeTab === 'affiliates' && <AffiliatesPage currentUser={currentUser} onNavigate={onNavigate} />}
+            </div>
+            
+            {/* Sidebar Info - Stacked on Mobile */}
+            <div className="lg:col-span-4 space-y-6 order-last lg:order-none">
+              {isCurrentUserProfile && (
+                <div className="bg-gray-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-600/20 rounded-full blur-3xl"></div>
+                  <div className="relative z-10">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Carteira</p>
+                    <p className="text-4xl md:text-5xl font-black mb-10 tracking-tighter">${(profileOwner.balance || 0).toFixed(2)}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button className="bg-white/10 text-white py-4 rounded-2xl font-black text-[10px] uppercase border border-white/10 hover:bg-white/20 transition-all">Historico</button>
+                      <button className="bg-blue-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-700 transition-all">Sacar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
               
-              {profileOwner.card ? (
-                <div className="w-full h-48 rounded-2xl bg-gradient-to-br from-gray-800 to-black p-6 text-white shadow-2xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 transition-transform group-hover:scale-125"></div>
-                  <div className="flex justify-between items-start mb-10">
-                    <div className="w-12 h-10 bg-yellow-400/80 rounded-lg flex items-center justify-center"><BanknotesIcon className="h-8 w-8 text-yellow-900/30" /></div>
-                    <p className="font-black italic text-xl">CyBer<span className="text-blue-500">Bank</span></p>
+              <div className="bg-white dark:bg-darkcard p-8 rounded-[2.5rem] border border-gray-100 dark:border-white/10 shadow-sm">
+                <h4 className="font-black text-gray-900 dark:text-white uppercase text-[10px] tracking-widest mb-6 flex items-center gap-2">
+                  <ChartBarIcon className="h-4 w-4 text-blue-600" /> Bio Profissional
+                </h4>
+                {profileOwner.credentials && (
+                  <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-600/5 rounded-2xl border border-blue-100 dark:border-blue-900/20">
+                    <p className="text-blue-600 text-[9px] font-black uppercase mb-1">Qualificações</p>
+                    <p className="text-gray-800 dark:text-gray-300 text-sm font-bold leading-tight">{profileOwner.credentials}</p>
                   </div>
-                  <div className="mb-4">
-                    <p className="text-xl font-mono tracking-widest drop-shadow-md">{profileOwner.card.cardNumber}</p>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[10px] text-gray-400 uppercase font-bold">Titular</p>
-                      <p className="text-sm font-bold uppercase">{profileOwner.card.holderName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-400 uppercase font-bold text-right">Validade</p>
-                      <p className="text-sm font-bold">{profileOwner.card.expiryDate}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full text-center space-y-6">
-                  <div className="w-full h-48 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
-                    <CreditCardIcon className="h-12 w-12 mb-2" />
-                    <p className="font-bold">Nenhum cartão ativo</p>
-                  </div>
-                  <button onClick={() => setShowCardForm(true)} className="w-full bg-black text-white py-4 rounded-2xl font-black text-lg hover:bg-gray-800 transition-all shadow-lg active:scale-95">
-                    Solicitar Cartão Digital
-                  </button>
-                </div>
-              )}
-
-              {profileOwner.userType === UserType.CREATOR && (
-                <div className="w-full mt-8 p-6 bg-purple-50 rounded-2xl border border-purple-100">
-                  <h4 className="text-purple-800 font-black mb-4 flex items-center gap-2">
-                    <StarIcon className="h-5 w-5" /> Área do Criador
-                  </h4>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-xs text-purple-400 font-bold uppercase mb-1">Solicitar Resgate</p>
-                      <div className="flex gap-2">
-                        <input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value === '' ? '' : Number(e.target.value))} placeholder="$100 min." className="flex-1 p-3 rounded-xl border border-purple-200 outline-none text-sm font-bold" />
-                        <button onClick={handleWithdrawal} className="bg-purple-600 text-white px-4 py-2 rounded-xl font-bold text-sm">Sacar</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
+                <p className="text-gray-500 dark:text-gray-400 text-sm italic leading-relaxed">
+                  {profileOwner.bio || 'Nenhuma informação adicional fornecida.'}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Modal de Depósito */}
-      {showDepositModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-fade-in border border-white">
-            {depositStep === 'amount' && (
-              <>
-                <h3 className="text-3xl font-black mb-2 text-gray-900">Quanto adicionar?</h3>
-                <p className="text-gray-500 mb-8">O saldo será creditado imediatamente após a confirmação.</p>
-                <div className="relative mb-8">
-                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-blue-600">$</span>
-                    <input type="number" value={depositAmount} onChange={e => setDepositAmount(Number(e.target.value))} className="w-full text-5xl font-black p-6 pl-12 border-b-4 border-blue-100 focus:border-blue-600 outline-none text-left bg-transparent" placeholder="0.00" autoFocus />
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-8">
-                  {[20, 50, 100].map(v => (
-                    <button key={v} onClick={() => setDepositAmount(v)} className="bg-gray-50 p-4 rounded-2xl font-black hover:bg-blue-600 hover:text-white transition-all text-gray-600">${v}</button>
-                  ))}
-                </div>
-                <button onClick={() => setDepositStep('method')} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xl shadow-blue-200 shadow-xl active:scale-95 transition-all">Próximo</button>
-                <button onClick={() => setShowDepositModal(false)} className="w-full mt-4 text-gray-400 font-bold py-2">Cancelar</button>
-              </>
-            )}
-
-            {depositStep === 'method' && (
-              <>
-                <h3 className="text-2xl font-black mb-6">Forma de Pagamento</h3>
-                <div className="space-y-3 mb-8">
-                  <button onClick={() => setPaymentMethod('pix')} className={`w-full flex items-center gap-4 p-5 border-2 rounded-2xl transition-all ${paymentMethod === 'pix' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
-                    <div className="p-3 bg-blue-600 text-white rounded-xl"><QrCodeIcon className="h-6 w-6" /></div>
-                    <div className="text-left"><p className="font-black text-gray-800">Pix</p><p className="text-xs text-gray-500 font-bold">Aprovação em segundos</p></div>
-                  </button>
-                  <button onClick={() => setPaymentMethod('card')} className={`w-full flex items-center gap-4 p-5 border-2 rounded-2xl transition-all ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
-                    <div className="p-3 bg-indigo-600 text-white rounded-xl"><CreditCardIcon className="h-6 w-6" /></div>
-                    <div className="text-left"><p className="font-black text-gray-800">Cartão Salvo</p><p className="text-xs text-gray-500 font-bold">Crédito ou Débito</p></div>
-                  </button>
-                </div>
-                <button onClick={handleDeposit} disabled={!paymentMethod} className="w-full bg-blue-600 disabled:bg-gray-200 text-white py-5 rounded-2xl font-black text-xl shadow-xl transition-all">Confirmar Pagamento</button>
-                <button onClick={() => setDepositStep('amount')} className="w-full mt-4 text-gray-400 font-bold py-2">Voltar</button>
-              </>
-            )}
-
-            {depositStep === 'processing' && (
-              <div className="text-center py-16 flex flex-col items-center">
-                <div className="relative">
-                    <div className="w-24 h-24 border-4 border-blue-100 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-                </div>
-                <h3 className="text-2xl font-black mt-8">Garantindo segurança...</h3>
-                <p className="text-gray-400 font-bold mt-2">Estamos processando sua transação.</p>
-              </div>
-            )}
-
-            {depositStep === 'success' && (
-              <div className="text-center py-8">
-                <div className="bg-green-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 scale-up animate-bounce">
-                  <StarIcon className="h-12 w-12 text-green-600" />
-                </div>
-                <h3 className="text-3xl font-black text-gray-900 mb-2">Tudo certo!</h3>
-                <p className="text-gray-500 font-bold mb-8">Seu saldo de <span className="text-green-600">${depositAmount}</span> já está disponível na sua conta CyBerPhone.</p>
-                <button onClick={() => setShowDepositModal(false)} className="w-full bg-gray-900 text-white py-5 rounded-2xl font-black text-xl shadow-2xl transition-all active:scale-95">Incrível!</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Solicitação de Cartão */}
-      {showCardForm && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl border border-white">
-            <h3 className="text-3xl font-black mb-2 text-gray-900">Solicitar Cartão CyBerPhone</h3>
-            <p className="text-gray-500 mb-10">Receba benefícios exclusivos em nossa rede.</p>
-            <form onSubmit={handleRequestCard} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Nome no Cartão</label>
-                <input type="text" value={cardHolder} onChange={e => setCardHolder(e.target.value)} className="w-full p-5 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-blue-600 outline-none font-black text-lg transition-all" placeholder="NOME COMO NO DOCUMENTO" required />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Modalidade</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-blue-50 border-2 border-blue-600 rounded-2xl">
-                    <p className="font-black text-blue-900">Digital + Físico</p>
-                    <p className="text-[10px] font-bold text-blue-600 uppercase">Liberação imediata</p>
-                  </div>
-                  <div className="p-4 bg-gray-50 border-2 border-transparent rounded-2xl opacity-50 grayscale cursor-not-allowed">
-                    <p className="font-black text-gray-400">Somente Físico</p>
-                    <p className="text-[10px] font-bold text-gray-300 uppercase">Indisponível</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 bg-yellow-50 rounded-2xl border border-yellow-100 flex items-start gap-4">
-                <IdentificationIcon className="h-6 w-6 text-yellow-600 shrink-0" />
-                <p className="text-sm text-yellow-800 font-bold leading-tight">Ao solicitar, você concorda com nossos termos de conta digital e uso de dados para análise de crédito.</p>
-              </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowCardForm(false)} className="flex-1 text-gray-400 font-black py-4">Voltar</button>
-                <button type="submit" className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">Emitir Meu Cartão</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Feed de Publicações do Usuário */}
-      <div className="mt-16">
-        <h3 className="text-2xl font-black text-gray-800 mb-8 border-b pb-4 border-gray-100">Publicações</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {ownerPosts.map(post => (
-            <PostCard key={post.id} post={post} currentUser={currentUser} onNavigate={onNavigate} onFollowToggle={() => {}} refreshUser={refreshUser} onPostUpdatedOrDeleted={fetchProfileData} onPinToggle={() => {}} />
-          ))}
-          {ownerPosts.length === 0 && (
-            <div className="col-span-full py-20 text-center bg-gray-50 rounded-[2.5rem] border-2 border-dashed border-gray-200">
-              <p className="text-gray-400 font-bold text-xl italic">Este usuário ainda não publicou nada.</p>
-            </div>
-          )}
         </div>
       </div>
     </div>

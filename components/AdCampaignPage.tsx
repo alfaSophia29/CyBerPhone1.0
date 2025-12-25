@@ -1,300 +1,432 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { AdCampaign, User } from '../types';
-import { saveAds, getAds, updateUserBalance } from '../services/storageService';
+import { saveAds, getAds, updateUserBalance, findUserById } from '../services/storageService';
 import { generateAdCopy } from '../services/geminiService';
-import { MIN_AD_CAMPAIGN_USD_COST, KZT_TO_USD_RATE } from '../constants'; // Import monetization constants
+import { MIN_AD_CAMPAIGN_USD_COST, KZT_TO_USD_RATE, DEFAULT_PROFILE_PIC } from '../constants';
+import { 
+  RocketLaunchIcon, 
+  MegaphoneIcon, 
+  EyeIcon, 
+  CursorArrowRaysIcon, 
+  PhotoIcon, 
+  CurrencyDollarIcon,
+  ChevronRightIcon,
+  ChevronLeftIcon,
+  DevicePhoneMobileIcon,
+  ComputerDesktopIcon,
+  SparklesIcon,
+  CheckCircleIcon,
+  ClockIcon
+} from '@heroicons/react/24/solid';
 
 interface AdCampaignPageProps {
   currentUser: User;
-  refreshUser: () => void; // Added refreshUser for balance updates
+  refreshUser: () => void;
+  onNavigate?: (page: string) => void;
 }
 
+type Step = 'objective' | 'creative' | 'budget';
+
 const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUser }) => {
-  const [adCampaigns, setAdCampaigns] = useState<AdCampaign[]>([]);
-  const [newAdTitle, setNewAdTitle] = useState('');
-  const [newAdDescription, setNewAdDescription] = useState('');
-  const [newAdTargetAudience, setNewAdTargetAudience] = useState('');
-  const [newAdBudget, setNewAdBudget] = useState<number>(MIN_AD_CAMPAIGN_USD_COST); // Default to min cost
-  const [newAdImageUrl, setNewAdImageUrl] = useState('');
-  const [newAdLinkUrl, setNewAdLinkUrl] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false); // For form submission
-  const [geminiAdPrompt, setGeminiAdPrompt] = useState('');
-  const [geminiAdLoading, setGeminiAdLoading] = useState(false);
-  const [geminiAdError, setGeminiAdError] = useState('');
+  const [activeStep, setActiveStep] = useState<Step>('objective');
+  const [loading, setLoading] = useState(false);
+  const [geminiLoading, setGeminiLoading] = useState(false);
+
+  // Form State
+  const [objective, setObjective] = useState<'traffic' | 'awareness' | 'engagement'>('traffic');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [ctaText, setCtaText] = useState('Saiba Mais');
+  const [targetAudience, setTargetAudience] = useState('');
+  const [budget, setBudget] = useState<number>(MIN_AD_CAMPAIGN_USD_COST);
+
+  const [myAds, setMyAds] = useState<AdCampaign[]>([]);
 
   useEffect(() => {
-    // All users can create ads now, so just filter by currentUser.id
-    const allAds = getAds();
-    const userAds = allAds.filter((ad) => ad.professorId === currentUser.id); // professorId is conceptually creatorId
-    setAdCampaigns(userAds);
-  }, [currentUser]);
+    setMyAds(getAds().filter(ad => ad.professorId === currentUser.id));
+  }, [currentUser.id]);
 
-  const handleCreateAd = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    if (!newAdTitle.trim() || !newAdDescription.trim() || !newAdTargetAudience.trim() || newAdBudget <= 0) {
-      setError('Por favor, preencha todos os campos obrigatórios para o anúncio.');
-      setLoading(false);
-      return;
-    }
-
-    if (newAdBudget < MIN_AD_CAMPAIGN_USD_COST) {
-      setError(`O orçamento mínimo para uma campanha de anúncio é $${MIN_AD_CAMPAIGN_USD_COST.toFixed(2)} USD (${(MIN_AD_CAMPAIGN_USD_COST * KZT_TO_USD_RATE).toFixed(0)} KZT).`);
-      setLoading(false);
-      return;
-    }
-
-    if ((currentUser.balance || 0) < newAdBudget) {
-      setError(`Saldo insuficiente para cobrir o orçamento da campanha de $${newAdBudget.toFixed(2)} USD.`);
-      setLoading(false);
-      return;
-    }
-
-    const confirmDeduction = window.confirm(
-      `Confirmar a criação da campanha de anúncio? $${newAdBudget.toFixed(2)} USD serão deduzidos do seu saldo.`
-    );
-
-    if (!confirmDeduction) {
-      setError('Criação da campanha de anúncio cancelada.');
-      setLoading(false);
-      return;
-    }
-
-    // Deduct balance
-    const balanceUpdated = updateUserBalance(currentUser.id, -newAdBudget);
-    if (!balanceUpdated) {
-      setError('Falha ao deduzir o orçamento da campanha do saldo.');
-      setLoading(false);
-      return;
-    }
-    refreshUser(); // Update currentUser state in App.tsx
-
-
-    const newAd: AdCampaign = {
-      id: `ad-${Date.now()}`,
-      professorId: currentUser.id, // professorId is conceptually creatorId
-      title: newAdTitle,
-      description: newAdDescription,
-      targetAudience: newAdTargetAudience,
-      budget: newAdBudget,
-      isActive: true, // New ads are active by default
-      imageUrl: newAdImageUrl || `https://picsum.photos/600/300?random=${Date.now()}`, // Placeholder image
-      linkUrl: newAdLinkUrl || '#',
-      timestamp: Date.now(), // Add timestamp for sorting in feed
-    };
-
-    const allAds = getAds();
-    saveAds([...allAds, newAd]);
-    setAdCampaigns((prev) => [...prev, newAd]);
-
-    // Clear form
-    setNewAdTitle('');
-    setNewAdDescription('');
-    setNewAdTargetAudience('');
-    setNewAdBudget(MIN_AD_CAMPAIGN_USD_COST); // Reset to min cost
-    setNewAdImageUrl('');
-    setNewAdLinkUrl('');
-    setLoading(false);
-    alert(`Campanha de anúncio criada com sucesso! $${newAdBudget.toFixed(2)} deduzidos do seu saldo.`);
-  };
-
-  const handleGenerateAdCopy = async () => {
-    setGeminiAdLoading(true);
-    setGeminiAdError('');
+  const handleGeminiGen = async () => {
+    setGeminiLoading(true);
     try {
-      const prompt = `Título: ${newAdTitle}. Audiência: ${newAdTargetAudience}. Descrição atual: ${newAdDescription}. Detalhes adicionais: ${geminiAdPrompt}`;
-      const generatedCopy = await generateAdCopy(prompt);
-      // Attempt to parse title and description from generated copy if possible
-      const lines = generatedCopy.split('\n');
-      const titleLine = lines.find(line => line.toLowerCase().startsWith('título:'));
-      const descLines = lines.filter(line => !line.toLowerCase().startsWith('título:'));
-
-      if (titleLine) {
-        setNewAdTitle(titleLine.replace(/título:\s*/i, '').trim());
-        setNewAdDescription(descLines.join('\n').trim());
-      } else {
-        setNewAdDescription(generatedCopy); // Fallback to entire output if no title found
-      }
-      setGeminiAdPrompt('');
-    } catch (err: any) {
-      setGeminiAdError(err.message || 'Erro ao gerar cópia do anúncio com Gemini.');
+      const prompt = `Crie um anúncio para: ${title || 'meu novo curso'}. Público: ${targetAudience || 'estudantes'}.`;
+      const copy = await generateAdCopy(prompt);
+      setDescription(copy);
     } finally {
-      setGeminiAdLoading(false);
+      setGeminiLoading(false);
     }
   };
+
+  const handlePublish = () => {
+    if (!title || !description || !targetAudience) {
+      alert("Por favor, preencha as informações obrigatórias.");
+      return;
+    }
+
+    if ((currentUser.balance || 0) < budget) {
+      alert("Saldo insuficiente na carteira.");
+      return;
+    }
+
+    setLoading(true);
+    setTimeout(() => {
+      const newAd: AdCampaign = {
+        id: `ad-${Date.now()}`,
+        professorId: currentUser.id,
+        title,
+        description,
+        targetAudience,
+        budget,
+        isActive: true,
+        imageUrl: imageUrl || 'https://picsum.photos/600/300',
+        linkUrl: linkUrl || '#',
+        timestamp: Date.now()
+      };
+
+      updateUserBalance(currentUser.id, -budget, `Criação de Anúncio: ${title}`);
+      const all = getAds();
+      saveAds([...all, newAd]);
+      setMyAds([newAd, ...myAds]);
+      
+      alert("Campanha publicada com sucesso!");
+      resetForm();
+      setLoading(false);
+      refreshUser();
+    }, 2000);
+  };
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setImageUrl('');
+    setLinkUrl('');
+    setActiveStep('objective');
+  };
+
+  const objectives = [
+    { id: 'traffic', label: 'Tráfego', icon: CursorArrowRaysIcon, desc: 'Envie alunos para seu site ou curso.' },
+    { id: 'awareness', label: 'Reconhecimento', icon: EyeIcon, desc: 'Alcance o máximo de pessoas possíveis.' },
+    { id: 'engagement', label: 'Engajamento', icon: MegaphoneIcon, desc: 'Obtenha mais curtidas e comentários.' },
+  ];
 
   return (
-    <div className="container mx-auto p-4 md:p-8 pt-24 pb-20 md:pb-8"> {/* Adjusted padding */}
-      <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b pb-3 border-gray-200">Gerenciar Campanhas de Anúncios</h2>
-
-      {/* Create New Ad Campaign */}
-      <div className="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-gray-100 transform transition-all duration-300 hover:scale-[1.005]">
-        <h3 className="text-2xl font-bold text-gray-800 mb-4">Criar Nova Campanha</h3>
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4">
-            <span className="block sm:inline">{error}</span>
-          </div>
-        )}
-        <form onSubmit={handleCreateAd} className="space-y-4">
-          <div>
-            <label htmlFor="adTitle" className="block text-gray-700 text-sm font-bold mb-2">
-              Título do Anúncio:
-            </label>
-            <input
-              type="text"
-              id="adTitle"
-              value={newAdTitle}
-              onChange={(e) => setNewAdTitle(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
-              placeholder="Ex: Workshop Gratuito de Introdução à IA"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="adTarget" className="block text-gray-700 text-sm font-bold mb-2">
-              Público-alvo:
-            </label>
-            <input
-              type="text"
-              id="adTarget"
-              value={newAdTargetAudience}
-              onChange={(e) => setNewAdTargetAudience(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
-              placeholder="Ex: Estudantes universitários de tecnologia, profissionais iniciantes"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="adDescription" className="block text-gray-700 text-sm font-bold mb-2">
-              Descrição do Anúncio:
-            </label>
-            <textarea
-              id="adDescription"
-              value={newAdDescription}
-              onChange={(e) => setNewAdDescription(e.target.value)}
-              rows={4}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y transition-shadow duration-200"
-              placeholder="Descreva seu anúncio de forma persuasiva."
-              required
-            ></textarea>
-            {/* Gemini Ad Copy Generator */}
-            <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-              <input
-                type="text"
-                value={geminiAdPrompt}
-                onChange={(e) => setGeminiAdPrompt(e.target.value)}
-                placeholder="Ex: Focar nos benefícios de carreira e acesso exclusivo"
-                className="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-400 transition-shadow duration-200"
-                disabled={geminiAdLoading}
-              />
-              <button
-                type="button"
-                onClick={handleGenerateAdCopy}
-                className={`px-5 py-2 rounded-lg font-semibold text-white transition-colors flex-shrink-0 shadow-sm ${
-                  geminiAdLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
-                }`}
-                disabled={geminiAdLoading}
-                aria-label="Gerar Cópia do Anúncio com Gemini"
-              >
-                {geminiAdLoading ? (
-                  <svg className="animate-spin h-5 w-5 mr-3 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : 'Gerar Cópia com Gemini'}
-              </button>
-            </div>
-            {geminiAdError && (
-              <p className="text-red-500 text-sm mt-1">{geminiAdError}</p>
-            )}
-          </div>
-          <div>
-            <label htmlFor="adBudget" className="block text-gray-700 text-sm font-bold mb-2">
-              Orçamento Diário (USD):
-            </label>
-            <input
-              type="number"
-              id="adBudget"
-              value={newAdBudget}
-              onChange={(e) => setNewAdBudget(parseFloat(e.target.value))}
-              min={MIN_AD_CAMPAIGN_USD_COST}
-              step="0.01"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
-              required
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              *Orçamento mínimo: ${MIN_AD_CAMPAIGN_USD_COST.toFixed(2)} USD ({(MIN_AD_CAMPAIGN_USD_COST * KZT_TO_USD_RATE).toFixed(0)} KZT).
-              Os preços aumentam com base no alcance do público e do tempo de exibição do anúncio.
-            </p>
-          </div>
-          <div>
-            <label htmlFor="adImageUrl" className="block text-gray-700 text-sm font-bold mb-2">
-              URL da Imagem (Opcional):
-            </label>
-            <input
-              type="url"
-              id="adImageUrl"
-              value={newAdImageUrl}
-              onChange={(e) => setNewAdImageUrl(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
-              placeholder="https://exemplo.com/imagem-do-anuncio.jpg"
-            />
-          </div>
-          <div>
-            <label htmlFor="adLinkUrl" className="block text-gray-700 text-sm font-bold mb-2">
-              URL do Link (Opcional):
-            </label>
-            <input
-              type="url"
-              id="adLinkUrl"
-              value={newAdLinkUrl}
-              onChange={(e) => setNewAdLinkUrl(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
-              placeholder="https://exemplo.com/pagina-destino"
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold text-lg transition-colors shadow-md hover:shadow-lg w-full"
-            disabled={loading || geminiAdLoading}
-          >
-            {loading ? 'Criando Anúncio...' : 'Criar Campanha'}
-          </button>
-        </form>
-      </div>
-
-      {/* Existing Ad Campaigns */}
-      <h3 className="text-2xl font-bold text-gray-800 mb-4 border-b pb-3 border-gray-200">Minhas Campanhas Ativas</h3>
-      {adCampaigns.length === 0 ? (
-        <p className="text-gray-600 text-center bg-white p-6 rounded-2xl shadow-md border border-gray-200">
-          Você não tem campanhas de anúncios ativas.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {adCampaigns.map((ad) => (
-            <div key={ad.id} className="bg-white rounded-xl shadow-md p-5 border border-gray-200 transform transition-all duration-300 hover:scale-[1.005]">
-              <h4 className="text-xl font-semibold text-gray-900 mb-2">{ad.title}</h4>
-              {ad.imageUrl && (
-                <img src={ad.imageUrl} alt={ad.title} className="w-full h-32 object-cover rounded-md mb-3" />
-              )}
-              <p className="text-gray-700 text-sm mb-2">{ad.description}</p>
-              <p className="text-gray-600 text-xs mb-1">Público: {ad.targetAudience}</p>
-              <p className="text-gray-600 text-xs mb-3">Orçamento: ${ad.budget.toFixed(2)}/dia</p>
-              <a
-                href={ad.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
-              >
-                Ver Anúncio
-              </a>
-            </div>
-          ))}
+    <div className="min-h-screen bg-[#f0f2f5] dark:bg-[#0b0e14] pt-20 pb-24 px-4 md:px-8">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header - FB Style */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+           <div>
+              <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tighter">Central de Anúncios CyBer</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest mt-1">Gerencie seu alcance e vendas</p>
+           </div>
+           <div className="flex items-center gap-4 bg-white dark:bg-darkcard p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+              <div className="text-right">
+                 <p className="text-[10px] font-black text-gray-400 uppercase">Saldo Disponível</p>
+                 <p className="text-lg font-black text-blue-600">${(currentUser.balance || 0).toFixed(2)}</p>
+              </div>
+              <button className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow-lg shadow-blue-100 dark:shadow-none hover:bg-blue-700 transition-all">+ Fundos</button>
+           </div>
         </div>
-      )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* Sidebar de Passos - Desktop */}
+          <aside className="hidden lg:block lg:col-span-3 space-y-2">
+             <div className="bg-white dark:bg-darkcard rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-white/5 sticky top-24">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6">Configuração da Campanha</p>
+                <div className="space-y-4">
+                   {[
+                     { id: 'objective', label: '1. Objetivo', icon: RocketLaunchIcon },
+                     { id: 'creative', label: '2. Criativo', icon: PhotoIcon },
+                     { id: 'budget', label: '3. Orçamento', icon: CurrencyDollarIcon },
+                   ].map(step => (
+                     <button 
+                       key={step.id}
+                       disabled={loading}
+                       onClick={() => setActiveStep(step.id as Step)}
+                       className={`w-full flex items-center gap-4 p-4 rounded-2xl font-black text-sm transition-all ${activeStep === step.id ? 'bg-blue-600 text-white shadow-xl scale-105' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                     >
+                       <step.icon className="h-5 w-5" />
+                       {step.label}
+                     </button>
+                   ))}
+                </div>
+             </div>
+          </aside>
+
+          {/* Área de Formulário Principal */}
+          <main className="lg:col-span-5 space-y-6">
+             
+             {/* Progress Bar Mobile */}
+             <div className="lg:hidden flex justify-between mb-4 px-2">
+                {['objective', 'creative', 'budget'].map((s, i) => (
+                   <div key={s} className={`h-2 flex-1 mx-1 rounded-full ${activeStep === s ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/10'}`}></div>
+                ))}
+             </div>
+
+             <div className="bg-white dark:bg-darkcard rounded-[2.5rem] p-8 shadow-xl border border-gray-100 dark:border-white/5">
+                
+                {/* Passo 1: Objetivo */}
+                {activeStep === 'objective' && (
+                  <div className="animate-fade-in">
+                    <h3 className="text-xl font-black mb-2 text-gray-900 dark:text-white">Qual seu objetivo hoje?</h3>
+                    <p className="text-gray-500 text-sm mb-8">Escolha a meta que melhor descreve o que você deseja alcançar.</p>
+                    <div className="space-y-4">
+                       {objectives.map(obj => (
+                         <button 
+                           key={obj.id}
+                           onClick={() => setObjective(obj.id as any)}
+                           className={`w-full flex items-center gap-5 p-5 rounded-[2rem] border-4 transition-all text-left group ${objective === obj.id ? 'border-blue-600 bg-blue-50 dark:bg-blue-600/10' : 'border-gray-50 dark:border-white/5 hover:border-gray-200'}`}
+                         >
+                            <div className={`p-4 rounded-2xl ${objective === obj.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-400'} transition-colors`}>
+                               <obj.icon className="h-7 w-7" />
+                            </div>
+                            <div>
+                               <p className="font-black text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{obj.label}</p>
+                               <p className="text-xs text-gray-500">{obj.desc}</p>
+                            </div>
+                         </button>
+                       ))}
+                    </div>
+                    <button onClick={() => setActiveStep('creative')} className="w-full mt-10 bg-gray-900 dark:bg-white dark:text-black text-white py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 active:scale-95 transition-all">Continuar <ChevronRightIcon className="h-6 w-6"/></button>
+                  </div>
+                )}
+
+                {/* Passo 2: Criativo */}
+                {activeStep === 'creative' && (
+                  <div className="animate-fade-in space-y-6">
+                    <h3 className="text-xl font-black text-gray-900 dark:text-white">Design do Anúncio</h3>
+                    <div className="space-y-4">
+                       <div className="relative">
+                          <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Título do Anúncio</label>
+                          <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold" placeholder="Ex: Masterclass de Física Quântica" />
+                       </div>
+                       
+                       <div className="relative">
+                          <div className="flex justify-between items-center mb-2">
+                             <label className="text-[10px] font-black text-gray-400 uppercase block ml-2">Texto Principal</label>
+                             <button onClick={handleGeminiGen} disabled={geminiLoading} className="text-[9px] font-black uppercase text-purple-600 flex items-center gap-1 hover:underline">
+                                <SparklesIcon className="h-3 w-3" /> {geminiLoading ? 'Gerando...' : 'Gerar com IA'}
+                             </button>
+                          </div>
+                          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-medium text-sm" placeholder="Escreva o que as pessoas verão primeiro..." />
+                       </div>
+
+                       <div className="relative">
+                          <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">URL da Imagem / Criativo</label>
+                          <input type="text" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold" placeholder="Link da imagem (Unsplash, Picsum...)" />
+                       </div>
+
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Link de Destino</label>
+                             <input type="text" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl outline-none font-bold text-xs" placeholder="https://..." />
+                          </div>
+                          <div>
+                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Texto do Botão</label>
+                             <select value={ctaText} onChange={e => setCtaText(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl outline-none font-bold text-xs appearance-none">
+                                <option>Saiba Mais</option>
+                                <option>Comprar Agora</option>
+                                <option>Inscrever-se</option>
+                                <option>Ver Perfil</option>
+                             </select>
+                          </div>
+                       </div>
+                    </div>
+                    <div className="flex gap-4 pt-4">
+                       <button onClick={() => setActiveStep('objective')} className="flex-1 bg-gray-100 dark:bg-white/5 py-4 rounded-2xl font-black text-sm uppercase text-gray-500">Voltar</button>
+                       <button onClick={() => setActiveStep('budget')} className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-black text-sm uppercase shadow-xl">Próximo Passo</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Passo 3: Orçamento */}
+                {activeStep === 'budget' && (
+                  <div className="animate-fade-in space-y-8">
+                     <div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">Público e Orçamento</h3>
+                        <p className="text-gray-500 text-sm">Defina para quem você quer aparecer e quanto quer investir.</p>
+                     </div>
+
+                     <div className="space-y-6">
+                        <div className="relative">
+                           <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Público Alvo</label>
+                           <textarea value={targetAudience} onChange={e => setTargetAudience(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold text-sm" placeholder="Ex: Estudantes de engenharia, interessados em cálculo, 18-35 anos..." />
+                        </div>
+
+                        <div className="p-6 bg-blue-50 dark:bg-blue-600/10 rounded-[2rem] border-2 border-blue-100 dark:border-blue-900/20">
+                           <div className="flex justify-between items-end mb-4">
+                              <label className="text-[10px] font-black text-blue-600 uppercase">Investimento Total (USD)</label>
+                              <p className="text-3xl font-black text-blue-600">${budget.toFixed(2)}</p>
+                           </div>
+                           <input 
+                             type="range" 
+                             min={MIN_AD_CAMPAIGN_USD_COST} 
+                             max={500} 
+                             step={5} 
+                             value={budget} 
+                             onChange={e => setBudget(parseFloat(e.target.value))} 
+                             className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                           />
+                           <div className="flex justify-between mt-2 text-[9px] font-black text-blue-300 uppercase">
+                              <span>Min: ${MIN_AD_CAMPAIGN_USD_COST}</span>
+                              <span>Max: $500</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl">
+                           <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                           <p className="text-xs font-bold text-gray-600 dark:text-gray-400">Alcance estimado: <span className="text-blue-600 font-black">{Math.floor(budget * 250).toLocaleString()} pessoas</span></p>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl">
+                           <ClockIcon className="h-5 w-5 text-blue-500" />
+                           <p className="text-xs font-bold text-gray-600 dark:text-gray-400">Duração: <span className="text-blue-600 font-black">7 dias úteis</span></p>
+                        </div>
+                     </div>
+
+                     <div className="flex gap-4">
+                        <button onClick={() => setActiveStep('creative')} className="flex-1 bg-gray-100 dark:bg-white/5 py-4 rounded-2xl font-black text-sm uppercase text-gray-500">Voltar</button>
+                        <button 
+                          onClick={handlePublish}
+                          disabled={loading}
+                          className="flex-[2] bg-green-600 text-white py-4 rounded-2xl font-black text-sm uppercase shadow-xl shadow-green-100 dark:shadow-none hover:bg-green-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin rounded-full" /> : <><RocketLaunchIcon className="h-5 w-5"/> PUBLICAR ANÚNCIO</>}
+                        </button>
+                     </div>
+                  </div>
+                )}
+             </div>
+          </main>
+
+          {/* PRÉVIA EM TEMPO REAL - Idêntica ao Feed */}
+          <aside className="lg:col-span-4 space-y-6">
+             <div className="sticky top-24">
+                <div className="flex items-center justify-between mb-4 px-2">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prévia do Feed</p>
+                   <div className="flex gap-2">
+                      <DevicePhoneMobileIcon className="h-4 w-4 text-blue-600" />
+                      <ComputerDesktopIcon className="h-4 w-4 text-gray-300" />
+                   </div>
+                </div>
+
+                <div className="bg-white dark:bg-darkcard rounded-[2.5rem] shadow-2xl border-4 border-white dark:border-darkcard overflow-hidden">
+                   {/* Header do Card Simulado */}
+                   <div className="p-5 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                         <img src={currentUser.profilePicture || DEFAULT_PROFILE_PIC} className="w-10 h-10 rounded-xl object-cover" />
+                         <div>
+                            <p className="font-black text-xs text-gray-900 dark:text-white leading-none">{currentUser.firstName} {currentUser.lastName}</p>
+                            <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">Anúncio Patrocinado</p>
+                         </div>
+                      </div>
+                      <div className="flex gap-1">
+                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                      </div>
+                   </div>
+
+                   {/* Conteúdo Simulado */}
+                   <div className="px-5 pb-3">
+                      <p className="text-xs text-gray-600 dark:text-gray-300 font-medium leading-relaxed line-clamp-3">
+                         {description || 'O texto principal do seu anúncio aparecerá aqui. Use gatilhos mentais e benefícios para o aluno.'}
+                      </p>
+                   </div>
+
+                   {/* Mídia Simulada */}
+                   <div className="bg-gray-100 dark:bg-[#1a1c24] h-52 relative overflow-hidden group">
+                      {imageUrl ? (
+                        <img src={imageUrl} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                           <PhotoIcon className="h-12 w-12 mb-2 opacity-20" />
+                           <p className="text-[9px] font-black uppercase tracking-widest">Seu criativo aqui</p>
+                        </div>
+                      )}
+                      
+                      {/* Banner de CTA no Card */}
+                      <div className="absolute bottom-0 left-0 w-full bg-white/95 dark:bg-darkcard/95 backdrop-blur-md p-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+                         <div className="flex-1 pr-4">
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter truncate">{linkUrl || 'cyberphone.io/sua-oferta'}</p>
+                            <p className="text-xs font-black text-gray-900 dark:text-white truncate">{title || 'Título Chamativo'}</p>
+                         </div>
+                         <button className="bg-gray-900 dark:bg-white dark:text-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase whitespace-nowrap shadow-lg">
+                            {ctaText}
+                         </button>
+                      </div>
+                   </div>
+
+                   {/* Footer Simulado */}
+                   <div className="p-4 flex items-center gap-4 border-t border-gray-50 dark:border-white/5 opacity-40 grayscale">
+                      <div className="flex items-center gap-1.5"><div className="w-4 h-4 bg-gray-200 rounded-full" /><div className="w-8 h-2 bg-gray-200 rounded-full" /></div>
+                      <div className="flex items-center gap-1.5"><div className="w-4 h-4 bg-gray-200 rounded-full" /><div className="w-8 h-2 bg-gray-200 rounded-full" /></div>
+                   </div>
+                </div>
+
+                {/* Dicas FB Style */}
+                <div className="mt-8 bg-purple-50 dark:bg-purple-600/5 p-6 rounded-3xl border border-purple-100 dark:border-purple-900/20">
+                   <div className="flex items-center gap-2 mb-3">
+                      <SparklesIcon className="h-5 w-5 text-purple-600" />
+                      <p className="text-[10px] font-black text-purple-600 uppercase">Dica de Performance</p>
+                   </div>
+                   <p className="text-xs text-purple-800 dark:text-purple-300 font-medium leading-relaxed">
+                      "Imagens com pouco texto costumam ter 40% mais alcance no feed dos alunos. Deixe o texto denso para a descrição!"
+                   </p>
+                </div>
+             </div>
+          </aside>
+        </div>
+
+        {/* Lista de Anúncios Existentes */}
+        {myAds.length > 0 && (
+          <section className="mt-20">
+             <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Suas Campanhas Ativas</h2>
+                <div className="h-px flex-1 mx-8 bg-gray-200 dark:bg-white/5" />
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {myAds.map(ad => (
+                   <div key={ad.id} className="bg-white dark:bg-darkcard rounded-3xl p-6 border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all group">
+                      <div className="flex justify-between items-start mb-4">
+                         <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 font-black">
+                               {ad.title[0]}
+                            </div>
+                            <div>
+                               <p className="font-black text-sm text-gray-900 dark:text-white line-clamp-1">{ad.title}</p>
+                               <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Veiculando Agora</p>
+                            </div>
+                         </div>
+                         <button className="text-gray-300 hover:text-red-500 transition-colors">
+                            <div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-1 h-1 bg-current rounded-full" />
+                         </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 my-6 py-4 border-y border-gray-50 dark:border-white/5">
+                         <div className="text-center">
+                            <p className="text-lg font-black text-gray-900 dark:text-white">{(Math.random() * 5000).toFixed(0)}</p>
+                            <p className="text-[9px] font-black text-gray-400 uppercase">Impressões</p>
+                         </div>
+                         <div className="text-center">
+                            <p className="text-lg font-black text-blue-600">${ad.budget.toFixed(2)}</p>
+                            <p className="text-[9px] font-black text-gray-400 uppercase">Investido</p>
+                         </div>
+                      </div>
+
+                      <button className="w-full py-3 bg-gray-50 dark:bg-white/5 rounded-xl text-xs font-black uppercase text-gray-500 hover:text-blue-600 transition-all">Ver Detalhes do Público</button>
+                   </div>
+                ))}
+             </div>
+          </section>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,8 +1,9 @@
 {
-  "name": "Copy of CyBerPhone",
+  "name": "CyBerPhone",
   "description": "CyBerPhone: A modern social network connecting users for sharing, interaction, and monetization. Features a dynamic feed, short videos (Reels), live streams, private chat, virtual stores, and advanced monetization tools for creators and standard users alike.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "display-capture"
   ]
 }

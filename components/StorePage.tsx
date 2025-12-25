@@ -1,6 +1,5 @@
 
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { User, UserType, Product, Store, ProductType } from '../types';
 import {
   getStores,
@@ -9,11 +8,31 @@ import {
   findUserById,
   updateStore,
   getProducts,
+  toggleFollowUser,
+  saveAffiliateLink,
 } from '../services/storageService';
 import { DEFAULT_PROFILE_PIC } from '../constants';
-import { ShoppingCartIcon, PencilIcon, CheckIcon, PlusIcon, TrashIcon, StarIcon } from '@heroicons/react/24/outline';
+import { 
+  ShoppingCartIcon, 
+  PencilIcon, 
+  CheckIcon, 
+  PlusIcon, 
+  TrashIcon, 
+  StarIcon, 
+  UserPlusIcon, 
+  UserMinusIcon, 
+  ShoppingBagIcon, 
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  Squares2X2Icon,
+  BookOpenIcon,
+  VideoCameraIcon,
+  AcademicCapIcon,
+  TruckIcon,
+  LinkIcon
+} from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
-
+import ProductDetailModal from './ProductDetailModal';
 
 interface StorePageProps {
   currentUser: User;
@@ -23,333 +42,231 @@ interface StorePageProps {
   onAddToCart: (productId: string) => void;
 }
 
-const StarRating: React.FC<{ rating: number; count: number }> = ({ rating, count }) => {
+const ProductCard: React.FC<{ 
+  product: Product; 
+  currentUser: User;
+  onSelect: (p: Product) => void; 
+  onAddToCart: (id: string) => void 
+}> = ({ product, currentUser, onSelect, onAddToCart }) => {
+  const [isAdded, setIsAdded] = useState(false);
+  const [isLinkGenerated, setIsLinkGenerated] = useState(false);
+
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onAddToCart(product.id);
+    setIsAdded(true);
+    setTimeout(() => setIsAdded(false), 2000);
+  };
+
+  const handleGenerateAffiliateLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const affiliateLink = `${window.location.origin}?page=store&storeId=${product.storeId}&productId=${product.id}&affiliateId=${currentUser.id}`;
+    saveAffiliateLink(currentUser.id, product.id, affiliateLink);
+    navigator.clipboard.writeText(affiliateLink);
+    setIsLinkGenerated(true);
+    setTimeout(() => setIsLinkGenerated(false), 3000);
+  };
+
   return (
-    <div className="flex items-center">
-      {[...Array(5)].map((_, i) => {
-        const ratingValue = i + 1;
-        return (
-          <StarIconSolid
-            key={i}
-            className={`h-4 w-4 ${
-              ratingValue <= Math.round(rating) ? 'text-yellow-400' : 'text-gray-300'
+    <div 
+      onClick={() => onSelect(product)}
+      className="bg-white dark:bg-darkcard rounded-[2rem] border border-gray-100 dark:border-white/10 shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group flex flex-col h-full w-full"
+    >
+      <div className="relative h-48 md:h-60 overflow-hidden">
+        <img src={product.imageUrls[0]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={product.name} />
+        <div className="absolute top-3 left-3 md:top-4 md:left-4 flex flex-col gap-2">
+           <span className="bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-lg text-[9px] md:text-[10px] font-black text-gray-900 uppercase shadow-sm">
+             {product.type === ProductType.PHYSICAL ? 'Físico' : 'Digital'}
+           </span>
+           {product.ratingCount > 10 && (
+             <span className="bg-orange-500 px-2.5 py-1 rounded-lg text-[9px] md:text-[10px] font-black text-white uppercase shadow-sm">
+               Best Seller
+             </span>
+           )}
+        </div>
+      </div>
+      <div className="p-5 md:p-6 flex flex-col flex-grow">
+        <div className="flex items-center gap-1 mb-2">
+          <StarIconSolid className="h-3 w-3 text-yellow-400" />
+          <span className="text-[10px] font-black text-gray-400 dark:text-gray-500">{product.averageRating.toFixed(1)} ({product.ratingCount})</span>
+        </div>
+        <h4 className="text-base md:text-lg font-black text-gray-900 dark:text-white line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors mb-4">{product.name}</h4>
+        
+        <div className="mt-auto pt-4 space-y-4 border-t border-gray-50 dark:border-white/5">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-tighter">Investimento</span>
+              <span className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">${product.price.toFixed(2)}</span>
+            </div>
+            <button 
+              onClick={handleAdd}
+              className={`p-3 md:p-4 rounded-xl md:rounded-2xl transition-all shadow-lg active:scale-90 ${isAdded ? 'bg-green-500 text-white' : 'bg-gray-900 dark:bg-white dark:text-black text-white hover:bg-blue-600'}`}
+              title="Adicionar ao Carrinho"
+            >
+              {isAdded ? <CheckIcon className="h-5 w-5 md:h-6 md:w-6" /> : <PlusIcon className="h-5 w-5 md:h-6 md:w-6" />}
+            </button>
+          </div>
+
+          <button 
+            onClick={handleGenerateAffiliateLink}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 md:py-3 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-all ${
+              isLinkGenerated 
+              ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800' 
+              : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-100 dark:border-blue-900/30'
             }`}
-          />
-        );
-      })}
-      {count > 0 && <span className="text-xs text-gray-500 ml-1.5">({count})</span>}
+          >
+            {isLinkGenerated ? (
+              <><CheckIcon className="h-3.5 w-3.5" /> Copiado!</>
+            ) : (
+              <><LinkIcon className="h-3.5 w-3.5" /> Afiliar-se</>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
-
-export const StorePage: React.FC<StorePageProps> = ({ currentUser, onNavigate, storeId: propStoreId, onAddToCart }) => {
-  const [store, setStore] = useState<Store | null>(null);
-  const [allStores, setAllStores] = useState<Store[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+export const StorePage: React.FC<StorePageProps> = ({ currentUser, onNavigate, storeId: propStoreId, onAddToCart, refreshUser }) => {
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [addedProductId, setAddedProductId] = useState<string | null>(null);
-  
-  // Form state
-  const [newProductName, setNewProductName] = useState('');
-  const [newProductDescription, setNewProductDescription] = useState('');
-  const [newProductPrice, setNewProductPrice] = useState<number | ''>('');
-  const [newProductImageUrls, setNewProductImageUrls] = useState<string[]>(['']); // Array for multiple images
-  const [newProductCommissionRate, setNewProductCommissionRate] = useState<number | ''>(10);
-  const [newProductType, setNewProductType] = useState<ProductType>(ProductType.PHYSICAL);
-  const [newDigitalContentUrl, setNewDigitalContentUrl] = useState('');
-  const [newDigitalDownloadInstructions, setNewDigitalDownloadInstructions] = useState('');
-  const [newAffiliateLink, setNewAffiliateLink] = useState('');
-  
-  const storeToDisplayId = propStoreId || (currentUser.userType === UserType.CREATOR ? currentUser.storeId : undefined);
-  const isOwner = store?.professorId === currentUser.id;
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeCategory, setActiveCategory] = useState<ProductType | 'ALL'>('ALL');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [currentStore, setCurrentStore] = useState<Store | null>(null);
 
-  const fetchStoreData = useCallback(() => {
+  const fetchProducts = useCallback(() => {
     setLoading(true);
-    if (storeToDisplayId) {
-      const foundStore = findStoreById(storeToDisplayId);
-      if (foundStore) {
-        setStore(foundStore);
-        const allProducts = getProducts();
-        const storeProducts = allProducts.filter(p => foundStore.productIds.includes(p.id));
-        setProducts(storeProducts);
-      } else {
-        setStore(null);
-        setAllStores(getStores());
-      }
+    const products = getProducts();
+    if (propStoreId) {
+      const store = findStoreById(propStoreId);
+      setCurrentStore(store || null);
+      setAllProducts(products.filter(p => p.storeId === propStoreId));
     } else {
-      setStore(null);
-      setAllStores(getStores());
+      setCurrentStore(null);
+      setAllProducts(products);
     }
     setLoading(false);
-  }, [storeToDisplayId]);
+  }, [propStoreId]);
 
-  useEffect(() => {
-    fetchStoreData();
-  }, [fetchStoreData]);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  const handleAddToCartClick = (productId: string) => {
-    onAddToCart(productId);
-    setAddedProductId(productId);
-    setTimeout(() => setAddedProductId(null), 2000);
-  };
-  
-  const resetProductForm = () => {
-    setEditingProduct(null);
-    setNewProductName('');
-    setNewProductDescription('');
-    setNewProductPrice('');
-    setNewProductImageUrls(['']);
-    setNewProductCommissionRate(10);
-    setNewProductType(ProductType.PHYSICAL);
-    setNewDigitalContentUrl('');
-    setNewDigitalDownloadInstructions('');
-    setNewAffiliateLink('');
-    setFormMessage(null);
-  };
-  
-  const handleOpenProductModal = (product: Product | null) => {
-    resetProductForm();
-    if (product) {
-      setEditingProduct(product);
-      setNewProductName(product.name);
-      setNewProductDescription(product.description);
-      setNewProductPrice(product.price);
-      setNewProductImageUrls(product.imageUrls.length > 0 ? product.imageUrls : ['']);
-      setNewProductCommissionRate(product.affiliateCommissionRate * 100);
-      setNewProductType(product.type);
-      setNewDigitalContentUrl(product.digitalContentUrl || '');
-      setNewDigitalDownloadInstructions(product.digitalDownloadInstructions || '');
-      setNewAffiliateLink(product.affiliateLink || '');
-    }
-    setIsProductModalOpen(true);
-  };
-  
-  const handleImageUrlChange = (index: number, value: string) => {
-    const updatedUrls = [...newProductImageUrls];
-    updatedUrls[index] = value;
-    setNewProductImageUrls(updatedUrls);
-  };
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          p.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = activeCategory === 'ALL' || p.type === activeCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [allProducts, searchTerm, activeCategory]);
 
-  const addImageUrlField = () => {
-    setNewProductImageUrls([...newProductImageUrls, '']);
-  };
+  const categories = [
+    { id: 'ALL', label: 'Tudo', icon: Squares2X2Icon },
+    { id: ProductType.DIGITAL_COURSE, label: 'Cursos', icon: VideoCameraIcon },
+    { id: ProductType.DIGITAL_EBOOK, label: 'E-books', icon: BookOpenIcon },
+    { id: ProductType.PHYSICAL, label: 'Físico', icon: TruckIcon },
+    { id: ProductType.DIGITAL_OTHER, label: 'Mentoria', icon: AcademicCapIcon },
+  ];
 
-  const removeImageUrlField = (index: number) => {
-    const updatedUrls = newProductImageUrls.filter((_, i) => i !== index);
-    setNewProductImageUrls(updatedUrls.length > 0 ? updatedUrls : ['']);
-  };
-
-  const handleAddOrUpdateProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!store || newProductPrice === '' || newProductCommissionRate === '') return;
-  
-    const allProducts = getProducts();
-    let updatedStoreProductIds = [...store.productIds];
-    
-    const finalImageUrls = newProductImageUrls.filter(url => url.trim() !== '');
-  
-    const productData = {
-      name: newProductName,
-      description: newProductDescription,
-      price: newProductPrice,
-      imageUrls: finalImageUrls.length > 0 ? finalImageUrls : [`https://picsum.photos/300/200?random=${Date.now()}`],
-      affiliateCommissionRate: newProductCommissionRate / 100,
-      type: newProductType,
-      digitalContentUrl: newProductType !== ProductType.PHYSICAL ? newDigitalContentUrl : undefined,
-      digitalDownloadInstructions: newProductType !== ProductType.PHYSICAL ? newDigitalDownloadInstructions : undefined,
-      affiliateLink: newAffiliateLink,
-    };
-  
-    if (editingProduct) {
-      const updatedProduct: Product = { ...editingProduct, ...productData };
-      const updatedAllProducts = allProducts.map(p => (p.id === editingProduct.id ? updatedProduct : p));
-      saveProducts(updatedAllProducts);
-    } else {
-      const newProduct: Product = { 
-        ...productData, 
-        id: `prod-${Date.now()}`, 
-        storeId: store.id,
-        ratings: [],
-        averageRating: 0,
-        ratingCount: 0,
-      };
-      saveProducts([...allProducts, newProduct]);
-      updatedStoreProductIds.push(newProduct.id);
-    }
-  
-    const updatedStore: Store = { ...store, productIds: updatedStoreProductIds };
-    updateStore(updatedStore);
-    fetchStoreData();
-    setIsProductModalOpen(false);
-  };
-  
-  if (loading) {
-    return <div className="container mx-auto p-4 pt-24 pb-20 text-center">Carregando loja...</div>;
-  }
-  
-  if (!store) {
-    return (
-      <div className="container mx-auto p-4 md:p-8 pt-24 pb-20 md:pb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b pb-3 border-gray-200">Lojas de Criadores</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {allStores.map(s => {
-            const owner = findUserById(s.professorId);
-            return (
-              <div key={s.id} onClick={() => onNavigate('store', { storeId: s.id })} className="bg-white rounded-xl shadow-md p-5 border border-gray-100 cursor-pointer transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                <div className="flex items-center mb-4">
-                  <img src={owner?.profilePicture || DEFAULT_PROFILE_PIC} alt={owner?.firstName} className="w-16 h-16 rounded-full object-cover mr-4 border-2 border-indigo-300" />
-                  <div>
-                    <h3 className="font-bold text-lg text-gray-900 leading-tight">{s.name}</h3>
-                    <p className="text-sm text-gray-600">por {owner?.firstName}</p>
-                  </div>
-                </div>
-                <p className="text-gray-700 text-sm line-clamp-3 h-[60px]">{s.description}</p>
-                <span className="text-indigo-600 font-semibold text-sm mt-3 inline-block">Ver Loja &rarr;</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const storeOwner = findUserById(store.professorId);
+  if (loading) return <div className="pt-32 text-center font-black text-gray-400 uppercase tracking-widest animate-pulse dark:text-white">Conectando ao Marketplace...</div>;
 
   return (
-    <div className="container mx-auto p-4 md:p-8 pt-24 pb-20 md:pb-8">
-      <header className="relative bg-white rounded-2xl shadow-xl p-6 mb-8 border border-gray-100">
-        <div className="h-40 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-t-xl -m-6 mb-6"></div>
-        <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-8 -mt-20">
-            <img src={storeOwner?.profilePicture || DEFAULT_PROFILE_PIC} alt={storeOwner?.firstName} className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg" />
-            <div className="flex-grow text-center md:text-left pt-16">
-              <h2 className="text-4xl font-extrabold text-gray-900 mb-1">{store.name}</h2>
-              <p className="text-lg text-gray-600 mb-2">Por {storeOwner?.firstName} {storeOwner?.lastName}</p>
-              <p className="text-gray-700">{store.description}</p>
-            </div>
-            {isOwner && (
-                <button onClick={() => handleOpenProductModal(null)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold transition-colors shadow-md mt-4 md:mt-16">
-                    Adicionar Produto
-                </button>
-            )}
-        </div>
-      </header>
+    <div className="w-full max-w-full overflow-x-hidden container mx-auto p-4 md:p-8 pt-24 pb-20">
       
-      <div className="mt-8">
-        <h3 className="text-2xl font-bold text-gray-800 mb-6">Produtos</h3>
-        {products.length === 0 ? (
-          <p className="text-gray-600 text-center p-4">Nenhum produto ainda.</p>
+      {/* Header do Marketplace / Loja */}
+      <div className="mb-8 md:mb-12">
+        {currentStore ? (
+          <div className="flex flex-col md:flex-row items-center gap-5 p-6 md:p-8 bg-white dark:bg-darkcard rounded-[2rem] md:rounded-[3rem] shadow-xl border border-gray-100 dark:border-white/10">
+             <img src={findUserById(currentStore.professorId)?.profilePicture || DEFAULT_PROFILE_PIC} className="w-20 h-20 md:w-24 md:h-24 rounded-[1.5rem] md:rounded-[2rem] object-cover shadow-2xl" />
+             <div className="text-center md:text-left flex-grow">
+                <h2 className="text-2xl md:text-4xl font-black text-gray-900 dark:text-white">{currentStore.name}</h2>
+                <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 font-medium max-w-xl">{currentStore.description}</p>
+             </div>
+             <button onClick={() => onNavigate('store')} className="w-full md:w-auto bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 px-6 py-3 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase transition-all">Sair da Loja</button>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product) => (
-              <div key={product.id} className="bg-white rounded-xl shadow-md border border-gray-100 flex flex-col overflow-hidden group transform transition-all duration-300 hover:scale-105 hover:shadow-xl">
-                <div className="relative">
-                    <img src={product.imageUrls[0] || 'https://picsum.photos/300/200?random'} alt={product.name} className="w-full h-48 object-cover" />
-                    <div className="absolute top-2 right-2 bg-black/50 text-white text-xs font-bold px-2 py-1 rounded-full">{product.type === ProductType.PHYSICAL ? 'Físico' : 'Digital'}</div>
+          <div className="flex flex-col gap-6 md:gap-8">
+             <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+                <div className="text-center md:text-left">
+                  <h2 className="text-3xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tighter mb-2">Marketplace <span className="text-blue-600">Pro</span></h2>
+                  <p className="text-gray-500 dark:text-gray-400 font-bold uppercase tracking-widest text-[9px] md:text-xs">Produtos exclusivos da nossa comunidade</p>
                 </div>
-                <div className="p-4 flex flex-col flex-grow">
-                    <h4 className="text-lg font-bold text-gray-900 mb-1 flex-grow line-clamp-2">{product.name}</h4>
-                    <div className="my-2"><StarRating rating={product.averageRating} count={product.ratingCount} /></div>
-                    <p className="text-2xl font-extrabold text-indigo-600 mb-3">${product.price.toFixed(2)}</p>
-                    <div className="mt-auto space-y-2">
-                        <button
-                          onClick={() => handleAddToCartClick(product.id)}
-                          disabled={addedProductId === product.id}
-                          className={`w-full px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center justify-center gap-2 ${
-                            addedProductId === product.id 
-                            ? 'bg-green-500 text-white cursor-not-allowed' 
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                          }`}
-                        >
-                          {addedProductId === product.id ? <><CheckIcon className="h-4 w-4"/> Adicionado</> : <><ShoppingCartIcon className="h-4 w-4"/> Adicionar ao Carrinho</>}
-                        </button>
-                         {isOwner && (
-                            <button onClick={() => handleOpenProductModal(product)} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-                                <PencilIcon className="h-4 w-4" /> Editar
-                            </button>
-                        )}
-                    </div>
+                <div className="relative w-full md:w-96">
+                   <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                   <input 
+                    type="text" 
+                    placeholder="Buscar conteúdo..." 
+                    className="w-full pl-12 pr-6 py-3.5 md:py-4 bg-white dark:bg-darkcard rounded-xl md:rounded-2xl shadow-sm border border-gray-100 dark:border-white/10 focus:border-blue-500 outline-none font-bold transition-all dark:text-white text-sm"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                   />
                 </div>
-              </div>
-            ))}
+             </div>
+
+             {/* Filtros de Categorias - Scrollable on mobile */}
+             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id as any)}
+                    className={`flex items-center gap-2 px-5 py-2.5 md:px-6 md:py-3 rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm whitespace-nowrap transition-all ${
+                      activeCategory === cat.id 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
+                        : 'bg-white dark:bg-darkcard text-gray-500 border border-gray-100 dark:border-white/10 hover:border-blue-200'
+                    }`}
+                  >
+                    <cat.icon className="h-4 w-4 md:h-5 md:w-5" />
+                    {cat.label}
+                  </button>
+                ))}
+             </div>
           </div>
         )}
       </div>
 
-      {isProductModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 animate-fade-in" onClick={() => setIsProductModalOpen(false)}>
-              <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                  <form onSubmit={handleAddOrUpdateProduct} className="space-y-4">
-                      <h3 className="text-2xl font-bold text-gray-800">{editingProduct ? 'Editar Produto' : 'Adicionar Produto'}</h3>
-                      {formMessage && <div className={`p-3 rounded-lg text-sm ${formMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{formMessage.text}</div>}
-                      
-                      <div>
-                          <label className="block text-gray-700 text-sm font-bold mb-1">Nome:</label>
-                          <input type="text" value={newProductName} onChange={(e) => setNewProductName(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" required />
-                      </div>
-                      
-                      <div>
-                          <label className="block text-gray-700 text-sm font-bold mb-1">Descrição:</label>
-                          <textarea value={newProductDescription} onChange={(e) => setNewProductDescription(e.target.value)} rows={3} className="w-full p-2 border border-gray-300 rounded-lg" required />
-                      </div>
+      {/* Grid de Produtos */}
+      {filteredProducts.length === 0 ? (
+        <div className="text-center py-20 md:py-32 bg-white dark:bg-darkcard rounded-[2rem] md:rounded-[3rem] border-2 border-dashed border-gray-100 dark:border-white/10 mx-auto w-full">
+           <ShoppingBagIcon className="h-12 w-12 md:h-16 md:w-16 text-gray-200 dark:text-gray-800 mx-auto mb-4" />
+           <h3 className="text-lg md:text-xl font-black text-gray-400">Nenhum item encontrado</h3>
+           <button onClick={() => {setSearchTerm(''); setActiveCategory('ALL');}} className="text-blue-600 font-bold mt-4 hover:underline text-sm uppercase tracking-widest">Limpar filtros</button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 animate-fade-in">
+           {filteredProducts.map(product => (
+             <ProductCard 
+               key={product.id} 
+               product={product} 
+               currentUser={currentUser}
+               onSelect={setSelectedProduct} 
+               onAddToCart={onAddToCart} 
+             />
+           ))}
+        </div>
+      )}
 
-                      <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2">Imagens do Produto (URLs):</label>
-                        {newProductImageUrls.map((url, index) => (
-                          <div key={index} className="flex items-center gap-2 mb-2">
-                            <input type="url" value={url} onChange={(e) => handleImageUrlChange(index, e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="https://exemplo.com/imagem.png" />
-                            <button type="button" onClick={() => removeImageUrlField(index)} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200"><TrashIcon className="h-4 w-4"/></button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={addImageUrlField} className="text-sm text-blue-600 font-semibold flex items-center gap-1"><PlusIcon className="h-4 w-4"/> Adicionar outra imagem</button>
-                      </div>
+      {/* Footer CTA - Responsive */}
+      <div className="mt-16 md:mt-20 p-8 md:p-12 bg-gradient-to-br from-gray-900 to-black rounded-[2.5rem] md:rounded-[4rem] text-white flex flex-col md:flex-row items-center justify-between gap-8 md:gap-10">
+         <div className="max-w-md text-center md:text-left">
+            <h3 className="text-2xl md:text-3xl font-black mb-3 md:mb-4">Seja um Autor</h3>
+            <p className="text-sm md:text-base text-gray-400 font-medium">Transforme seu conhecimento em produtos digitais e monetize sua audiência na CyBerPhone.</p>
+         </div>
+         <button 
+           onClick={() => onNavigate('manage-store')}
+           className="w-full md:w-auto bg-white text-black px-8 md:px-10 py-4 md:py-5 rounded-xl md:rounded-[2rem] font-black text-base md:text-xl hover:scale-105 active:scale-95 transition-all shadow-2xl"
+         >
+           Começar Agora
+         </button>
+      </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">Preço (USD):</label>
-                            <input type="number" value={newProductPrice} onChange={(e) => setNewProductPrice(e.target.value === '' ? '' : parseFloat(e.target.value))} min="0.01" step="0.01" className="w-full p-2 border border-gray-300 rounded-lg" required />
-                        </div>
-                        <div>
-                          <label className="block text-gray-700 text-sm font-bold mb-1">Comissão (%):</label>
-                          <input type="number" value={newProductCommissionRate} onChange={(e) => setNewProductCommissionRate(e.target.value === '' ? '' : parseInt(e.target.value))} min="1" max="50" className="w-full p-2 border border-gray-300 rounded-lg" required />
-                        </div>
-                      </div>
-                      <div>
-                          <label className="block text-gray-700 text-sm font-bold mb-1">Tipo:</label>
-                          <select value={newProductType} onChange={(e) => setNewProductType(e.target.value as ProductType)} className="w-full p-2 border border-gray-300 rounded-lg" required>
-                            <option value={ProductType.PHYSICAL}>Físico</option>
-                            <option value={ProductType.DIGITAL_COURSE}>Digital (Curso)</option>
-                            <option value={ProductType.DIGITAL_EBOOK}>Digital (E-book)</option>
-                            <option value={ProductType.DIGITAL_OTHER}>Digital (Outro)</option>
-                          </select>
-                      </div>
-                      {newProductType !== ProductType.PHYSICAL && (
-                        <>
-                          <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">URL do Conteúdo Digital:</label>
-                            <input type="url" value={newDigitalContentUrl} onChange={e => setNewDigitalContentUrl(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="Link para download ou acesso" />
-                          </div>
-                          <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-1">Instruções de Acesso:</label>
-                            <textarea value={newDigitalDownloadInstructions} onChange={e => setNewDigitalDownloadInstructions(e.target.value)} rows={2} className="w-full p-2 border border-gray-300 rounded-lg" />
-                          </div>
-                        </>
-                      )}
-                      <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-1">Link de Afiliação Externo (Opcional):</label>
-                        <input type="url" value={newAffiliateLink} onChange={e => setNewAffiliateLink(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="https://loja.com/produto?ref=123" />
-                      </div>
-
-                      <div className="flex justify-end space-x-3 pt-4">
-                          <button type="button" onClick={() => setIsProductModalOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-5 py-2 rounded-lg font-bold">Cancelar</button>
-                          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold">{editingProduct ? 'Salvar Alterações' : 'Adicionar Produto'}</button>
-                      </div>
-                  </form>
-              </div>
-          </div>
+      {/* Modal de Detalhes */}
+      {selectedProduct && (
+        <ProductDetailModal 
+          product={selectedProduct} 
+          onClose={() => setSelectedProduct(null)} 
+          onAddToCart={onAddToCart}
+          onNavigate={onNavigate}
+        />
       )}
     </div>
   );

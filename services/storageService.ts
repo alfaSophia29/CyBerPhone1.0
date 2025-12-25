@@ -1,5 +1,5 @@
 
-import { User, Post, ChatConversation, AdCampaign, UserType, Store, Product, AffiliateSale, Comment, ShippingAddress, ProductType, Notification, NotificationType, AudioTrack, CartItem, ProductRating, Transaction, TransactionType, PaymentCard } from '../types';
+import { User, Post, ChatConversation, AdCampaign, UserType, Store, Product, AffiliateSale, Comment, ShippingAddress, ProductType, Notification, NotificationType, AudioTrack, CartItem, ProductRating, Transaction, TransactionType, PaymentCard, OrderStatus, CyberEvent } from '../types';
 import { DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_ADS, DEFAULT_STORES, DEFAULT_PRODUCTS, DEFAULT_AFFILIATE_SALES, DEFAULT_AUDIO_TRACKS } from '../constants';
 
 const USERS_KEY = 'cyberphone_users';
@@ -13,6 +13,8 @@ const AFFILIATE_SALES_KEY = 'cyberphone_affiliate_sales';
 const NOTIFICATIONS_KEY = 'cyberphone_notifications';
 const AUDIO_TRACKS_KEY = 'cyberphone_audio_tracks';
 const CART_KEY = 'cyberphone_cart';
+const EVENTS_KEY = 'cyberphone_events';
+const AFFILIATE_LINKS_KEY = 'cyberphone_affiliate_links';
 
 const initializeData = () => {
   if (!localStorage.getItem(USERS_KEY)) {
@@ -45,11 +47,55 @@ const initializeData = () => {
   if (!localStorage.getItem(CART_KEY)) {
     localStorage.setItem(CART_KEY, JSON.stringify([]));
   }
+  if (!localStorage.getItem(EVENTS_KEY)) {
+    localStorage.setItem(EVENTS_KEY, JSON.stringify([]));
+  }
+  if (!localStorage.getItem(AFFILIATE_LINKS_KEY)) {
+    localStorage.setItem(AFFILIATE_LINKS_KEY, JSON.stringify([]));
+  }
 };
 
 initializeData();
 
-// --- Auth Mock ---
+// --- Affiliate Links ---
+export const saveAffiliateLink = (userId: string, productId: string, link: string) => {
+  const links = JSON.parse(localStorage.getItem(AFFILIATE_LINKS_KEY) || '[]');
+  const existingIndex = links.findIndex((l: any) => l.userId === userId && l.productId === productId);
+  
+  if (existingIndex > -1) {
+    links[existingIndex].link = link;
+    links[existingIndex].timestamp = Date.now();
+  } else {
+    links.push({ userId, productId, link, timestamp: Date.now() });
+  }
+  
+  localStorage.setItem(AFFILIATE_LINKS_KEY, JSON.stringify(links));
+};
+
+export const getAffiliateLinks = (userId: string) => {
+  const links = JSON.parse(localStorage.getItem(AFFILIATE_LINKS_KEY) || '[]');
+  return links.filter((l: any) => l.userId === userId);
+};
+
+// --- Eventos ---
+export const getEvents = (): CyberEvent[] => JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]');
+export const saveEvents = (events: CyberEvent[]) => localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+export const createEvent = (event: CyberEvent) => {
+  const events = getEvents();
+  saveEvents([...events, event]);
+};
+export const toggleJoinEvent = (eventId: string, userId: string) => {
+  const events = getEvents();
+  const event = events.find(e => e.id === eventId);
+  if (event) {
+    const idx = event.attendees.indexOf(userId);
+    if (idx > -1) event.attendees.splice(idx, 1);
+    else event.attendees.push(userId);
+    saveEvents(events);
+  }
+};
+
+// --- Auth ---
 export const loginUser = async (email: string, password: string): Promise<User> => {
   const users = getUsers();
   const user = users.find(u => u.email === email);
@@ -125,18 +171,32 @@ export const requestDebitCard = (userId: string, card: PaymentCard) => {
 };
 
 // --- Posts ---
-export const getPosts = (): Post[] => JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+export const getPosts = (includeScheduled: boolean = false, creatorId?: string): Post[] => {
+  const posts: Post[] = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const now = Date.now();
+  
+  if (includeScheduled && creatorId) {
+    // Retorna todos os posts do criador, incluindo agendados
+    return posts.filter(p => p.userId === creatorId || (!p.scheduledAt || p.scheduledAt <= now));
+  }
+  
+  // No Feed normal, apenas posts onde o tempo agendado já passou ou não existe
+  return posts.filter(p => !p.scheduledAt || p.scheduledAt <= now);
+};
+
 export const savePosts = (posts: Post[]) => localStorage.setItem(POSTS_KEY, JSON.stringify(posts));
-export const deletePost = (id: string) => savePosts(getPosts().filter(p => p.id !== id));
-export const updatePost = (updated: Post) => savePosts(getPosts().map(p => p.id === updated.id ? updated : p));
+export const deletePost = (id: string) => savePosts(getPosts(true).filter(p => p.id !== id));
+export const updatePost = (updated: Post) => {
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  savePosts(allPosts.map((p: Post) => p.id === updated.id ? updated : p));
+};
 
 export const reportPost = (postId: string, userId: string) => {
   console.log(`Post ${postId} denunciado pelo usuário ${userId}`);
-  // Lógica de moderação simulada
   return true;
 };
 
-// --- Outros ---
+// --- Marketplace ---
 export const getStores = (): Store[] => JSON.parse(localStorage.getItem(STORES_KEY) || '[]');
 export const saveStores = (stores: Store[]) => localStorage.setItem(STORES_KEY, JSON.stringify(stores));
 export const findStoreById = (id: string) => getStores().find(s => s.id === id);
@@ -168,8 +228,17 @@ export const addProductRating = (saleId: string, rating: number, comment: string
 
 export const getAffiliateSales = (): AffiliateSale[] => JSON.parse(localStorage.getItem(AFFILIATE_SALES_KEY) || '[]');
 export const saveAffiliateSales = (sales: AffiliateSale[]) => localStorage.setItem(AFFILIATE_SALES_KEY, JSON.stringify(sales));
-export const getSalesByAffiliateId = (id: string) => getAffiliateSales().filter(s => s.affiliateUserId === id);
-export const getSalesByStoreId = (id: string) => getAffiliateSales().filter(s => s.storeId === id);
+export const getPurchasesByBuyerId = (id: string) => getAffiliateSales().filter(s => s.buyerId === id).sort((a, b) => b.timestamp - a.timestamp);
+
+// Added missing exported member getSalesByAffiliateId for AffiliatesPage.
+export const getSalesByAffiliateId = (affiliateUserId: string): AffiliateSale[] => {
+  return getAffiliateSales().filter(sale => sale.affiliateUserId === affiliateUserId);
+};
+
+// Added missing exported member getSalesByStoreId for AffiliatesPage.
+export const getSalesByStoreId = (storeId: string): AffiliateSale[] => {
+  return getAffiliateSales().filter(sale => sale.storeId === storeId);
+};
 
 export const getAds = (): AdCampaign[] => JSON.parse(localStorage.getItem(ADS_KEY) || '[]');
 export const saveAds = (ads: AdCampaign[]) => localStorage.setItem(ADS_KEY, JSON.stringify(ads));
@@ -193,15 +262,14 @@ export const getChats = (): ChatConversation[] => JSON.parse(localStorage.getIte
 export const saveChats = (chats: ChatConversation[]) => localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
 
 export const pinPost = (postId: string, userId: string) => {
-  const posts = getPosts();
-  posts.forEach(p => { if(p.userId === userId) p.isPinned = (p.id === postId); });
+  const posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  posts.forEach((p: Post) => { if(p.userId === userId) p.isPinned = (p.id === postId); });
   savePosts(posts);
 };
 
-// Fix: Add optional userId to unpinPost to fix type error in components that pass two arguments
 export const unpinPost = (postId: string, userId?: string) => {
-  const posts = getPosts();
-  const p = posts.find(x => x.id === postId && (!userId || x.userId === userId));
+  const posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const p = posts.find((x: Post) => x.id === postId && (!userId || x.userId === userId));
   if(p) p.isPinned = false;
   savePosts(posts);
 };
@@ -221,8 +289,8 @@ export const toggleFollowUser = (currentId: string, targetId: string) => {
 };
 
 export const updatePostLikes = (postId: string, userId: string) => {
-  const posts = getPosts();
-  const p = posts.find(x => x.id === postId);
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const p = allPosts.find((x: Post) => x.id === postId);
   if (p) {
     const idx = p.likes.indexOf(userId);
     if (idx > -1) p.likes.splice(idx, 1);
@@ -230,13 +298,13 @@ export const updatePostLikes = (postId: string, userId: string) => {
       p.likes.push(userId);
       createNotification({ type: NotificationType.LIKE, recipientId: p.userId, actorId: userId, postId, timestamp: Date.now() });
     }
-    updatePost(p);
+    savePosts(allPosts);
   }
 };
 
 export const updatePostReactions = (postId: string, userId: string, emoji: string) => {
-  const posts = getPosts();
-  const post = posts.find(p => p.id === postId);
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const post = allPosts.find((p: Post) => p.id === postId);
   if (post) {
     if (!post.reactions) post.reactions = {};
     const users = post.reactions[emoji] || [];
@@ -247,37 +315,37 @@ export const updatePostReactions = (postId: string, userId: string, emoji: strin
       post.reactions[emoji] = [...users, userId];
       createNotification({ type: NotificationType.REACTION, recipientId: post.userId, actorId: userId, postId, timestamp: Date.now() });
     }
-    updatePost(post);
+    savePosts(allPosts);
   }
 };
 
 export const addPostComment = (postId: string, comment: Comment) => {
-  const posts = getPosts();
-  const p = posts.find(x => x.id === postId);
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const p = allPosts.find((x: Post) => x.id === postId);
   if (p) {
     p.comments.push(comment);
     createNotification({ type: NotificationType.COMMENT, recipientId: p.userId, actorId: comment.userId, postId, timestamp: Date.now() });
-    updatePost(p);
+    savePosts(allPosts);
   }
 };
 
 export const updatePostShares = (postId: string, userId: string) => {
-  const posts = getPosts();
-  const p = posts.find(x => x.id === postId);
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const p = allPosts.find((x: Post) => x.id === postId);
   if (p && !p.shares.includes(userId)) {
     p.shares.push(userId);
-    updatePost(p);
+    savePosts(allPosts);
   }
 };
 
 export const updatePostSaves = (postId: string, userId: string) => {
-  const posts = getPosts();
-  const p = posts.find(x => x.id === postId);
+  const allPosts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
+  const p = allPosts.find((x: Post) => x.id === postId);
   if (p) {
     const idx = p.saves.indexOf(userId);
     if (idx > -1) p.saves.splice(idx, 1);
     else p.saves.push(userId);
-    updatePost(p);
+    savePosts(allPosts);
   }
 };
 
@@ -285,20 +353,16 @@ export const processProductPurchase = (items: CartItem[], buyerId: string, affId
   const users = getUsers();
   const buyer = users.find(u => u.id === buyerId);
   if(!buyer) return false;
-
   const prods = getProducts();
   const sales = getAffiliateSales();
-
   items.forEach(item => {
     const p = prods.find(x => x.id === item.productId);
     if(!p) return;
     const total = p.price * item.quantity;
-    
-    // Simulação básica de fluxo financeiro
     updateUserBalance(buyerId, -total, `Compra de ${p.name}`);
-    
+    const initialStatus = p.type === ProductType.PHYSICAL ? OrderStatus.WAITLIST : OrderStatus.DELIVERED;
     const sale: AffiliateSale = {
-      id: `sale-${Date.now()}`,
+      id: `sale-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       productId: p.id,
       buyerId,
       affiliateUserId: affId || '',
@@ -307,16 +371,15 @@ export const processProductPurchase = (items: CartItem[], buyerId: string, affId
       commissionEarned: total * p.affiliateCommissionRate,
       timestamp: Date.now(),
       isRated: false,
-      shippingAddress: addr
+      shippingAddress: addr,
+      status: initialStatus
     };
     sales.push(sale);
-
     if (affId) {
       updateUserBalance(affId, sale.commissionEarned, `Comissão de venda: ${p.name}`);
       createNotification({ type: NotificationType.AFFILIATE_SALE, recipientId: affId, actorId: buyerId, saleId: sale.id, timestamp: Date.now() });
     }
   });
-
   saveAffiliateSales(sales);
   return true;
 };

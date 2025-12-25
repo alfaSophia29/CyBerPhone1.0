@@ -22,22 +22,24 @@ import ChatPage from './components/ChatPage';
 import AdCampaignPage from './components/AdCampaignPage';
 import LiveStreamViewer from './components/LiveStreamViewer';
 import { StorePage } from './components/StorePage';
+import StoreManagerPage from './components/StoreManagerPage';
 import CreatePost from './components/CreatePost';
 import ReelsPage from './components/ReelsPage';
 import SearchResultsPage from './components/SearchResultsPage';
 import NotificationsPage from './components/NotificationsPage';
-import AffiliatesPage from './components/AffiliatesPage';
 import CartModal from './components/CartModal';
 import ReportUserPage from './components/ReportUserPage';
+import SettingsPage from './components/SettingsPage';
 import { requestNotificationPermission, showNotification } from './services/notificationService';
 
-type Page = 'auth' | 'feed' | 'profile' | 'chat' | 'ads' | 'live' | 'store' | 'edit-post' | 'create-post' | 'reels-page' | 'search-results' | 'notifications' | 'affiliates' | 'report-user';
+type Page = 'auth' | 'feed' | 'profile' | 'chat' | 'ads' | 'live' | 'store' | 'manage-store' | 'edit-post' | 'create-post' | 'reels-page' | 'search-results' | 'notifications' | 'report-user' | 'settings';
 
 const NOTIFICATION_POLL_INTERVAL = 5000;
 const LAST_NOTIFICATION_CHECK_KEY = 'cyberphone_last_notification_check';
 
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('cyberphone_theme') === 'dark');
     const [currentPage, setCurrentPage] = useState<Page>(() => {
         return getCurrentUserId() ? 'feed' : 'auth';
     });
@@ -48,6 +50,19 @@ const App: React.FC = () => {
     const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
         'Notification' in window ? Notification.permission : 'denied'
     );
+
+    const toggleTheme = useCallback(() => {
+        setDarkMode(prev => {
+            const newVal = !prev;
+            localStorage.setItem('cyberphone_theme', newVal ? 'dark' : 'light');
+            return newVal;
+        });
+    }, []);
+
+    useEffect(() => {
+        if (darkMode) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [darkMode]);
 
     const refreshCurrentUser = useCallback(() => {
         const userId = getCurrentUserId();
@@ -110,55 +125,6 @@ const App: React.FC = () => {
         refreshCart();
     };
 
-    const handleRequestNotificationPermission = useCallback(async () => {
-        const permission = await requestNotificationPermission();
-        setNotificationPermission(permission);
-    }, []);
-
-    useEffect(() => {
-        let notificationInterval: number | null = null;
-        if (currentUser && notificationPermission === 'granted') {
-            notificationInterval = window.setInterval(() => {
-                const lastCheckTime = parseInt(
-                    localStorage.getItem(`${LAST_NOTIFICATION_CHECK_KEY}_${currentUser.id}`) || '0',
-                    10
-                );
-                const currentTime = Date.now();
-                let newNotificationsDetected = 0;
-                const chats = JSON.parse(localStorage.getItem('cyberphone_chats') || '[]');
-                const users = JSON.parse(localStorage.getItem('cyberphone_users') || '[]');
-                const findUserByIdLocal = (id: string) => users.find((u: any) => u.id === id);
-                const userChats = chats.filter((chat: any) => chat.participants.includes(currentUser.id));
-                userChats.forEach((chat: any) => {
-                    chat.messages.forEach((message: any) => {
-                        if (message.senderId !== currentUser.id && message.timestamp > lastCheckTime) {
-                            const sender = findUserByIdLocal(message.senderId);
-                            if (sender) {
-                                showNotification(
-                                    `Nova mensagem de ${sender.firstName}`,
-                                    {
-                                        body: message.text || (message.imageUrl ? 'Imagem enviada.' : 'Você recebeu uma nova mensagem.'),
-                                        icon: sender.profilePicture,
-                                        url: `/chat`,
-                                        tag: `new-chat-message-${message.id}`
-                                    }
-                                );
-                                newNotificationsDetected++;
-                            }
-                        }
-                    });
-                });
-                if (newNotificationsDetected > 0) {
-                    setUnreadNotificationsCount(prevCount => prevCount + newNotificationsDetected);
-                }
-                localStorage.setItem(`${LAST_NOTIFICATION_CHECK_KEY}_${currentUser.id}`, currentTime.toString());
-            }, NOTIFICATION_POLL_INTERVAL);
-        }
-        return () => {
-            if (notificationInterval) clearInterval(notificationInterval);
-        };
-    }, [currentUser, notificationPermission]);
-
     const cartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
     const renderPage = () => {
@@ -168,12 +134,13 @@ const App: React.FC = () => {
             case 'reels-page': return <ReelsPage currentUser={currentUser} onNavigate={handleNavigate} refreshUser={refreshCurrentUser} />;
             case 'profile': return <ProfilePage currentUser={currentUser} onNavigate={handleNavigate} refreshUser={refreshCurrentUser} userId={pageParams.userId} />;
             case 'chat': return <ChatPage currentUser={currentUser} />;
+            case 'settings': return <SettingsPage currentUser={currentUser} onNavigate={handleNavigate} darkMode={darkMode} toggleTheme={toggleTheme} refreshUser={refreshCurrentUser} />;
             case 'ads': return <AdCampaignPage currentUser={currentUser} refreshUser={refreshCurrentUser} />;
             case 'live':
                 if (pageParams.postId) return <LiveStreamViewer currentUser={currentUser} postId={pageParams.postId} onNavigate={handleNavigate} refreshUser={refreshCurrentUser} />;
                 return <FeedPage currentUser={currentUser} onNavigate={handleNavigate} refreshUser={refreshCurrentUser} />;
             case 'store': return <StorePage currentUser={currentUser} onNavigate={handleNavigate} refreshUser={refreshCurrentUser} storeId={pageParams.storeId} onAddToCart={handleAddToCart} />;
-            case 'affiliates': return <AffiliatesPage currentUser={currentUser} onNavigate={handleNavigate} />;
+            case 'manage-store': return <StoreManagerPage currentUser={currentUser} refreshUser={refreshCurrentUser} onNavigate={handleNavigate} />;
             case 'create-post': return <CreatePost currentUser={currentUser} onPostCreated={() => handleNavigate('feed')} refreshUser={refreshCurrentUser} />;
             case 'edit-post':
                 if (pageParams.postId) return <CreatePost currentUser={currentUser} onPostCreated={() => handleNavigate('feed')} refreshUser={refreshCurrentUser} postId={pageParams.postId} />;
@@ -186,7 +153,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-gray-50">
+        <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-darkbg text-gray-900 dark:text-gray-100 transition-colors duration-300">
             <Header
                 currentUser={currentUser}
                 onNavigate={handleNavigate}

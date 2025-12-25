@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Post, User, PostType, AudioTrack } from '../types';
 import { getPosts, findUserById, updatePostLikes, updatePostShares, toggleFollowUser, findAudioTrackById, updatePostSaves } from '../services/storageService';
@@ -12,7 +11,9 @@ import {
   PlayIcon,
   BookmarkIcon as BookmarkIconOutline,
   MusicalNoteIcon,
-  PlusIcon
+  PlusIcon,
+  SparklesIcon,
+  FilmIcon as FilmIconOutline
 } from '@heroicons/react/24/outline';
 import {
   HeartIcon as HeartIconSolid,
@@ -44,9 +45,8 @@ const ReelVideo: React.FC<ReelVideoProps> = ({ post, currentUser, onNavigate, on
   const [showPlayIcon, setShowPlayIcon] = useState(false);
   const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
   
-  // Estados para animação de coração central
-  const [showLikeHeart, setShowLikeHeart] = useState(false);
-  const [heartKey, setHeartKey] = useState(0); 
+  const [showBigHeart, setShowBigHeart] = useState(false);
+  const [heartAnimationKey, setHeartAnimationKey] = useState(0); 
   const [animateLikeButton, setAnimateLikeButton] = useState(false);
   
   const [progress, setProgress] = useState(0);
@@ -147,11 +147,13 @@ const ReelVideo: React.FC<ReelVideoProps> = ({ post, currentUser, onNavigate, on
     refreshUser();
   };
 
-  const triggerBigHeart = () => {
-    setHeartKey(prev => prev + 1);
-    setShowLikeHeart(true);
-    // Removemos do DOM após a animação de 1s definida no CSS
-    setTimeout(() => setShowLikeHeart(false), 1000);
+  const triggerDoubleTapHeart = () => {
+    setHeartAnimationKey(prev => prev + 1);
+    setShowBigHeart(true);
+    setTimeout(() => setShowBigHeart(false), 1000);
+    if (!hasLiked) {
+      handleLike();
+    }
   };
 
   const toggleMute = (e: React.MouseEvent) => {
@@ -161,21 +163,41 @@ const ReelVideo: React.FC<ReelVideoProps> = ({ post, currentUser, onNavigate, on
   
   const handleContainerClick = () => {
     if (clickTimeout.current) {
-      // Clique Duplo: Like
       clearTimeout(clickTimeout.current);
       clickTimeout.current = null;
-      
-      triggerBigHeart();
-      if (!hasLiked) {
-        handleLike();
-      }
+      triggerDoubleTapHeart();
     } else {
-      // Clique Simples: Play/Pause (Aguardando janela de 300ms)
       clickTimeout.current = window.setTimeout(() => {
         togglePlayPause();
         clickTimeout.current = null;
       }, 300);
     }
+  };
+
+  // Fix: Defined missing navigateToProfile function for interaction handlers
+  const navigateToProfile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onNavigate('profile', { userId: post.userId });
+  };
+
+  const getFilterStyle = () => {
+    // Filtro Neon CyBer: Intensifica azuis, rosas e o contraste geral
+    let filter = "brightness(1.15) contrast(1.3) saturate(1.8) drop-shadow(0 0 5px rgba(59, 130, 246, 0.4))";
+    
+    if (post.reel?.aiEffectPrompt) {
+      const p = post.reel.aiEffectPrompt.toLowerCase();
+      if (p.includes("neon") || p.includes("cyberpunk")) {
+        filter = "brightness(1.2) contrast(1.4) saturate(2.4) hue-rotate(285deg) drop-shadow(0 0 10px rgba(236, 72, 153, 0.5))";
+      } else if (p.includes("vibrant") || p.includes("satura")) {
+        filter = "saturate(260%) contrast(120%)";
+      } else if (p.includes("vintage") || p.includes("antigo")) {
+        filter = "sepia(40%) contrast(100%) brightness(1.1) grayscale(10%)";
+      } else if (p.includes("preto") || p.includes("black")) {
+        filter = "grayscale(100%) contrast(140%) brightness(0.9)";
+      }
+    }
+    
+    return { filter };
   };
   
   if (!postAuthor || !post.reel) return null;
@@ -190,117 +212,113 @@ const ReelVideo: React.FC<ReelVideoProps> = ({ post, currentUser, onNavigate, on
         src={post.reel.videoUrl}
         loop
         playsInline
-        className="absolute inset-0 w-full h-full object-cover"
+        style={getFilterStyle()}
+        className="absolute inset-0 w-full h-full object-cover transition-all duration-1000"
         onTimeUpdate={handleTimeUpdate}
       />
       
       {audioTrack && <audio ref={audioRef} src={audioTrack.url} loop />}
       
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/80 pointer-events-none"></div>
 
-      {/* Play/Pause Overlay */}
+      {/* Neon Scanline Effect Overlay (simulado) */}
+      <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,3px_100%]"></div>
+
+      {/* IA Visuals Badge */}
+      <div className="absolute top-6 left-6 z-20 flex items-center gap-3 bg-black/40 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
+         <SparklesIcon className="h-4 w-4 text-pink-500 animate-pulse" />
+         <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Neon CyBer Visuals</span>
+      </div>
+
       <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 pointer-events-none ${showPlayIcon ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="bg-black/40 rounded-full p-4 backdrop-blur-sm">
-          <PlayIcon className="h-12 w-12 text-white/90" />
+        <div className="bg-black/60 rounded-full p-6 backdrop-blur-xl border border-white/10 shadow-2xl">
+          <PlayIcon className="h-16 w-16 text-white" />
         </div>
       </div>
       
-      {/* CORAÇÃO CENTRAL (Double Tap) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 overflow-hidden">
-          {showLikeHeart && (
+          {showBigHeart && (
             <HeartIconSolid 
-              key={heartKey}
-              className="w-32 h-32 text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-like-heart" 
+              key={heartAnimationKey}
+              className="w-48 h-48 text-pink-500 drop-shadow-[0_0_30px_rgba(236,72,153,0.8)] animate-like-heart" 
             />
           )}
       </div>
 
-      {/* Mute Button */}
-      <div className="absolute top-4 right-4 z-20">
-          <button onClick={toggleMute} className="p-2 bg-black/20 backdrop-blur-md rounded-full text-white hover:bg-black/40 transition-colors">
-          {isMuted ? <SpeakerXMarkIcon className="h-5 w-5" /> : <SpeakerWaveIcon className="h-5 w-5" />}
+      <div className="absolute top-6 right-6 z-20">
+          <button onClick={toggleMute} className="p-3 bg-black/40 backdrop-blur-xl rounded-2xl text-white hover:bg-blue-600 transition-all border border-white/10 shadow-2xl">
+          {isMuted ? <SpeakerXMarkIcon className="h-6 w-6" /> : <SpeakerWaveIcon className="h-6 w-6" />}
         </button>
       </div>
 
-      {/* Autor Info */}
-      <div className="absolute bottom-4 left-0 w-full pl-4 pr-16 pb-6 z-10 text-white">
-        <div className="flex flex-col items-start gap-2 max-w-[85%]">
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={(e) => { e.stopPropagation(); onNavigate('profile', { userId: post.userId }); }}>
-            <span className="font-bold text-lg drop-shadow-md group-hover:underline">@{post.authorName}</span>
+      <div className="absolute bottom-6 left-0 w-full pl-6 pr-20 pb-8 z-10 text-white">
+        <div className="flex flex-col items-start gap-4 max-w-[90%]">
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={navigateToProfile}>
+            <div className="w-12 h-12 rounded-2xl border-2 border-white/20 overflow-hidden shadow-2xl">
+              <img src={postAuthor.profilePicture || DEFAULT_PROFILE_PIC} className="w-full h-full object-cover" alt={post.authorName}/>
+            </div>
+            <div>
+              <span className="font-black text-xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] group-hover:text-blue-400 transition-colors">@{post.authorName}</span>
+              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mt-1">Criador Certificado</p>
+            </div>
           </div>
-          <p className="text-sm md:text-base font-light drop-shadow-md line-clamp-2 leading-tight">{post.reel.description}</p>
+          <p className="text-base font-medium drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] line-clamp-3 leading-relaxed text-gray-100">{post.reel.description}</p>
           
           {audioTrack && (
-            <div className="flex items-center gap-2 mt-2 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full overflow-hidden max-w-[80%]">
-              <MusicalNoteIcon className="h-3 w-3 flex-shrink-0" />
-              <div className="marquee text-xs font-medium w-full">
-                <span className="marquee-content pr-4">{audioTrack.title} - {audioTrack.artist}</span>
+            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl overflow-hidden max-w-[85%] border border-white/5 shadow-xl">
+              <MusicalNoteIcon className="h-4 w-4 text-pink-400 flex-shrink-0 animate-bounce" />
+              <div className="marquee text-[10px] font-black uppercase tracking-widest w-full">
+                <span className="marquee-content pr-8">{audioTrack.title} &bull; {audioTrack.artist}</span>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Action Sidebar */}
-      <div className="absolute bottom-8 right-2 flex flex-col items-center gap-5 z-20 pb-4">
-        <div className="relative mb-2">
-            <img 
-              src={postAuthor.profilePicture || DEFAULT_PROFILE_PIC} 
-              className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-lg cursor-pointer transition-transform hover:scale-105" 
-              onClick={(e) => { e.stopPropagation(); onNavigate('profile', { userId: post.userId }); }}
-              alt={postAuthor.firstName}
-            />
-            {!isFollowing && currentUser.id !== post.userId && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onFollowToggle(post.userId); }}
-                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-500 rounded-full text-white p-0.5 border-2 border-white shadow-sm hover:scale-110 transition-transform"
-                >
-                    <PlusIcon className="h-3 w-3 font-bold" />
-                </button>
-            )}
-        </div>
-
-        <div className="flex flex-col items-center gap-1">
-          <button onClick={handleLike} className={`group transition-transform ${animateLikeButton ? 'scale-125' : 'active:scale-90'}`}>
+      <div className="absolute bottom-10 right-4 flex flex-col items-center gap-7 z-20 pb-4">
+        <div className="flex flex-col items-center gap-2">
+          <button onClick={handleLike} className={`group transition-all ${animateLikeButton ? 'scale-150' : 'active:scale-90 hover:scale-110'}`}>
               {hasLiked ? (
-                <HeartIconSolid className="h-9 w-9 text-red-500 drop-shadow-xl" />
+                <HeartIconSolid className="h-10 w-10 text-pink-500 drop-shadow-[0_0_15px_rgba(236,72,153,0.6)]" />
               ) : (
-                <HeartIconSolid className="h-9 w-9 text-white opacity-90 drop-shadow-xl group-hover:scale-110 transition-transform" />
+                <HeartIconSolid className="h-10 w-10 text-white opacity-80 drop-shadow-2xl" />
               )}
           </button>
-          <span className="text-xs font-semibold text-white drop-shadow-md">{post.likes.length}</span>
+          <span className="text-[10px] font-black text-white drop-shadow-2xl uppercase tracking-tighter">{post.likes.length}</span>
         </div>
 
-        <div className="flex flex-col items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); setIsCommentsModalOpen(true); }} className="group transition-transform active:scale-90">
-              <ChatIconOutline className="h-8 w-8 text-white drop-shadow-xl group-hover:scale-110 transition-transform" strokeWidth={2} />
+        <div className="flex flex-col items-center gap-2">
+          <button onClick={(e) => { e.stopPropagation(); setIsCommentsModalOpen(true); }} className="group transition-all hover:scale-110 active:scale-90">
+              <ChatIconOutline className="h-9 w-9 text-white opacity-80 drop-shadow-2xl" strokeWidth={2.5} />
           </button>
-          <span className="text-xs font-semibold text-white drop-shadow-md">{post.comments.length}</span>
+          <span className="text-[10px] font-black text-white drop-shadow-2xl uppercase tracking-tighter">{post.comments.length}</span>
         </div>
         
-        <div className="flex flex-col items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); updatePostSaves(post.id, currentUser.id); onPostUpdate(); }} className="group transition-transform active:scale-90">
-            {hasSaved ? <BookmarkIconSolid className="h-8 w-8 text-yellow-400 drop-shadow-xl"/> : <BookmarkIconOutline className="h-8 w-8 text-white drop-shadow-xl group-hover:scale-110 transition-transform" strokeWidth={2} />}
+        <div className="flex flex-col items-center gap-2">
+          <button onClick={(e) => { e.stopPropagation(); updatePostSaves(post.id, currentUser.id); onPostUpdate(); }} className="group transition-all hover:scale-110 active:scale-90">
+            {hasSaved ? <BookmarkIconSolid className="h-9 w-9 text-blue-400 drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]"/> : <BookmarkIconOutline className="h-9 w-9 text-white opacity-80 drop-shadow-2xl" strokeWidth={2.5} />}
           </button>
-          <span className="text-xs font-semibold text-white drop-shadow-md">{post.saves.length}</span>
+          <span className="text-[10px] font-black text-white drop-shadow-2xl uppercase tracking-tighter">{post.saves.length}</span>
         </div>
         
-        <div className="flex flex-col items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); updatePostShares(post.id, currentUser.id); alert('Link copiado!'); }} className="group transition-transform active:scale-90">
-              <ShareIconOutline className="h-8 w-8 text-white drop-shadow-xl group-hover:scale-110 transition-transform" strokeWidth={2} />
-          </button>
-        </div>
+        <button onClick={(e) => { e.stopPropagation(); updatePostShares(post.id, currentUser.id); alert('Link de convite copiado!'); }} className="group transition-all hover:scale-110 active:scale-90">
+            <ShareIconOutline className="h-9 w-9 text-white opacity-80 drop-shadow-2xl" strokeWidth={2.5} />
+        </button>
 
-        <div className="mt-2 relative">
-            <div className={`w-10 h-10 rounded-full bg-gray-800 border-[3px] border-gray-900 overflow-hidden ${!videoRef.current?.paused ? 'animate-spin-slow' : ''}`}>
-              <img src={postAuthor.profilePicture || DEFAULT_PROFILE_PIC} className="w-full h-full object-cover opacity-80" alt="Music" />
+        <div className="mt-4 relative group cursor-pointer" onClick={navigateToProfile}>
+            <div className={`w-12 h-12 rounded-full bg-gray-800 border-[3px] border-white/20 overflow-hidden shadow-2xl ${!videoRef.current?.paused ? 'animate-spin-slow' : ''}`}>
+              <img src={postAuthor.profilePicture || DEFAULT_PROFILE_PIC} className="w-full h-full object-cover opacity-90" alt="Music" />
             </div>
+            <div className="absolute inset-0 rounded-full border-2 border-pink-500 animate-ping opacity-20"></div>
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="absolute bottom-0 left-0 w-full h-1 bg-gray-600/30 z-30">
-        <div className="h-full bg-white/90 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }}></div>
+      {/* Progress Bar with Glow */}
+      <div className="absolute bottom-0 left-0 w-full h-1.5 bg-white/10 z-30 overflow-hidden">
+        <div 
+          className="h-full bg-gradient-to-r from-blue-500 to-pink-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] transition-all duration-100 ease-linear" 
+          style={{ width: `${progress}%` }}
+        ></div>
       </div>
 
       {isCommentsModalOpen && (
@@ -401,17 +419,20 @@ const ReelsPage: React.FC<ReelsPageProps> = ({ currentUser, onNavigate, refreshU
   if (loading) {
     return (
       <div className="flex items-center justify-center w-full h-screen bg-black text-white text-xl">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mr-3"></div>
-        Carregando...
+        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mr-3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+        <p className="font-black uppercase tracking-widest text-sm animate-pulse">Sintonizando CyBer Reels...</p>
       </div>
     );
   }
 
   if (reels.length === 0) {
     return (
-      <div className="flex items-center justify-center w-full h-screen bg-black text-white text-xl flex-col gap-4">
-        <p>Nenhum Reel disponível.</p>
-        <button onClick={() => onNavigate('create-post')} className="bg-blue-600 px-6 py-2 rounded-xl text-sm font-bold">Criar Primeiro Reel</button>
+      <div className="flex items-center justify-center w-full h-screen bg-black text-white text-xl flex-col gap-6">
+        <div className="bg-white/5 p-10 rounded-[3rem] border border-white/10 text-center">
+           <FilmIconOutline className="h-20 w-20 text-gray-700 mx-auto mb-4" />
+           <p className="font-black text-lg">A galeria está vazia.</p>
+           <button onClick={() => onNavigate('create-post')} className="bg-blue-600 px-10 py-4 rounded-[2rem] text-sm font-black uppercase mt-8 shadow-2xl active:scale-95 transition-all">Criar Primeiro Reel</button>
+        </div>
       </div>
     );
   }
@@ -420,7 +441,7 @@ const ReelsPage: React.FC<ReelsPageProps> = ({ currentUser, onNavigate, refreshU
     <>
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .animate-spin-slow { animation: spin 4s linear infinite; }
+        .animate-spin-slow { animation: spin 5s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
       <div

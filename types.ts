@@ -74,6 +74,7 @@ export interface ReelDetails {
   description: string;
   videoUrl: string;
   audioTrackId?: string;
+  aiEffectPrompt?: string;
 }
 
 export interface Comment {
@@ -92,6 +93,7 @@ export interface Post {
   authorProfilePic?: string;
   type: PostType;
   timestamp: number;
+  scheduledAt?: number; // Novo campo para agendamento
   content?: string;
   imageUrl?: string;
   liveStream?: LiveStreamDetails;
@@ -102,6 +104,19 @@ export interface Post {
   saves: string[];
   isPinned?: boolean;
   reactions?: Record<string, string[]>;
+}
+
+export interface CyberEvent {
+  id: string;
+  creatorId: string;
+  creatorName: string;
+  title: string;
+  description: string;
+  dateTime: number;
+  location: string;
+  type: 'ONLINE' | 'PRESENTIAL';
+  attendees: string[];
+  imageUrl?: string;
 }
 
 export interface Message {
@@ -125,6 +140,12 @@ export enum ProductType {
   DIGITAL_COURSE = 'DIGITAL_COURSE',
   DIGITAL_EBOOK = 'DIGITAL_EBOOK',
   DIGITAL_OTHER = 'DIGITAL_OTHER',
+}
+
+export enum OrderStatus {
+  WAITLIST = 'WAITLIST',
+  SHIPPING = 'SHIPPING',
+  DELIVERED = 'DELIVERED',
 }
 
 export interface ProductRating {
@@ -181,6 +202,7 @@ export interface AffiliateSale {
   digitalContentUrl?: string;
   digitalDownloadInstructions?: string;
   isRated?: boolean;
+  status: OrderStatus;
 }
 
 export enum NotificationType {

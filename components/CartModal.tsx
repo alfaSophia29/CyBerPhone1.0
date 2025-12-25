@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { CartItem, Product, User, ShippingAddress, ProductType } from '../types';
 import { findProductById, updateCartItemQuantity, removeFromCart, processProductPurchase, updateUserBalance } from '../services/storageService';
-import { XMarkIcon, PlusIcon, MinusIcon, TrashIcon, CreditCardIcon, QrCodeIcon, BanknotesIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
-import { CheckIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, PlusIcon, MinusIcon, TrashIcon, CreditCardIcon, QrCodeIcon, BanknotesIcon, ArrowPathIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, ShieldCheckIcon } from '@heroicons/react/24/solid';
 
 interface CartModalProps {
   isOpen: boolean;
@@ -62,92 +62,192 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-bold">Checkout</h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><XMarkIcon className="h-6 w-6" /></button>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex justify-end overflow-hidden" onClick={onClose}>
+      <div 
+        className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col animate-slide-left" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white">
+          <div className="flex items-center gap-3">
+             <ShoppingBagIcon className="h-6 w-6 text-blue-600" />
+             <h2 className="text-xl font-black text-gray-900">Meu Carrinho</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <XMarkIcon className="h-6 w-6 text-gray-400" />
+          </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-grow">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           {view === 'cart' && (
-            <div className="space-y-4">
-              {detailedCartItems.map(item => (
-                <div key={item.productId} className="flex items-center gap-4 bg-gray-50 p-3 rounded-2xl">
-                  <img src={item.product.imageUrls[0]} className="w-16 h-16 object-cover rounded-xl" />
-                  <div className="flex-1"><p className="font-bold text-sm">{item.product.name}</p><p className="text-blue-600 font-bold">${item.product.price}</p></div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity - 1); onCartUpdate(); }} className="p-1 bg-white rounded-md border"><MinusIcon className="h-4 w-4"/></button>
-                    <span className="font-bold">{item.quantity}</span>
-                    <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity + 1); onCartUpdate(); }} className="p-1 bg-white rounded-md border"><PlusIcon className="h-4 w-4"/></button>
-                  </div>
+            <>
+              {detailedCartItems.length === 0 ? (
+                <div className="text-center py-20">
+                  <ShoppingBagIcon className="h-16 w-16 text-gray-100 mx-auto mb-4" />
+                  <p className="text-gray-400 font-bold uppercase text-xs tracking-widest">Sua sacola está vazia</p>
+                  <button onClick={onClose} className="text-blue-600 font-black mt-4 uppercase text-sm">Explorar Marketplace</button>
                 </div>
-              ))}
-              {detailedCartItems.length === 0 && <p className="text-center py-10 text-gray-500">Carrinho vazio.</p>}
-            </div>
+              ) : (
+                <div className="space-y-4">
+                  {detailedCartItems.map(item => (
+                    <div key={item.productId} className="flex gap-4 p-4 bg-gray-50 rounded-2xl group border border-transparent hover:border-gray-100 transition-all">
+                      <div className="w-20 h-20 rounded-xl overflow-hidden shadow-sm">
+                        <img src={item.product.imageUrls[0]} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-sm text-gray-900 line-clamp-1">{item.product.name}</p>
+                        <p className="text-blue-600 font-black text-lg mt-1">${item.product.price.toFixed(2)}</p>
+                        <div className="flex items-center gap-3 mt-2">
+                           <div className="flex items-center bg-white border border-gray-100 rounded-lg p-1 shadow-sm">
+                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity - 1); onCartUpdate(); }} className="p-1 hover:text-blue-600 transition-colors"><MinusIcon className="h-4 w-4"/></button>
+                              <span className="w-8 text-center font-black text-xs">{item.quantity}</span>
+                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity + 1); onCartUpdate(); }} className="p-1 hover:text-blue-600 transition-colors"><PlusIcon className="h-4 w-4"/></button>
+                           </div>
+                           <button onClick={() => { removeFromCart(item.productId); onCartUpdate(); }} className="text-gray-300 hover:text-red-500 transition-colors">
+                              <TrashIcon className="h-5 w-5" />
+                           </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {view === 'shipping' && (
-            <div className="space-y-4">
-              <h3 className="font-bold text-lg">Onde devemos entregar?</h3>
-              <input type="text" placeholder="Endereço Completo" value={shippingDetails.address} onChange={e => setShippingDetails({...shippingDetails, address: e.target.value})} className="w-full p-3 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="text" placeholder="Cidade" value={shippingDetails.city} onChange={e => setShippingDetails({...shippingDetails, city: e.target.value})} className="w-full p-3 border rounded-xl" />
-                <input type="text" placeholder="CEP" value={shippingDetails.zipCode} onChange={e => setShippingDetails({...shippingDetails, zipCode: e.target.value})} className="w-full p-3 border rounded-xl" />
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                 <h3 className="font-black text-lg text-gray-900 mb-1">Dados de Entrega</h3>
+                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Para produtos físicos</p>
+              </div>
+              <div className="space-y-4">
+                <input type="text" placeholder="Endereço Completo" value={shippingDetails.address} onChange={e => setShippingDetails({...shippingDetails, address: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-blue-500 rounded-2xl outline-none font-bold transition-all" />
+                <div className="grid grid-cols-2 gap-4">
+                  <input type="text" placeholder="Cidade" value={shippingDetails.city} onChange={e => setShippingDetails({...shippingDetails, city: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-blue-500 rounded-2xl outline-none font-bold transition-all" />
+                  <input type="text" placeholder="CEP" value={shippingDetails.zipCode} onChange={e => setShippingDetails({...shippingDetails, zipCode: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-blue-500 rounded-2xl outline-none font-bold transition-all" />
+                </div>
               </div>
             </div>
           )}
 
           {view === 'payment' && (
-            <div className="space-y-3">
-              <h3 className="font-bold text-lg mb-4">Escolha como pagar</h3>
-              <button onClick={() => setSelectedPayment('balance')} className={`w-full flex items-center justify-between p-4 border-2 rounded-2xl transition-all ${selectedPayment === 'balance' ? 'border-blue-500 bg-blue-50' : 'border-gray-100'}`}>
-                <div className="flex items-center gap-3"><BanknotesIcon className="h-6 w-6 text-blue-600"/><div className="text-left"><p className="font-bold">Saldo CyBerPhone</p><p className="text-xs text-gray-500">Disponível: ${(currentUser.balance || 0).toFixed(2)}</p></div></div>
-                {selectedPayment === 'balance' && <CheckIcon className="h-5 w-5 text-blue-600" />}
-              </button>
-              <button onClick={() => setSelectedPayment('pix')} className={`w-full flex items-center justify-between p-4 border-2 rounded-2xl transition-all ${selectedPayment === 'pix' ? 'border-blue-500 bg-blue-50' : 'border-gray-100'}`}>
-                <div className="flex items-center gap-3"><QrCodeIcon className="h-6 w-6 text-green-600"/><p className="font-bold">Pix</p></div>
-                {selectedPayment === 'pix' && <CheckIcon className="h-5 w-5 text-green-600" />}
-              </button>
-              <button onClick={() => setSelectedPayment('card')} className={`w-full flex items-center justify-between p-4 border-2 rounded-2xl transition-all ${selectedPayment === 'card' ? 'border-blue-500 bg-blue-50' : 'border-gray-100'}`}>
-                <div className="flex items-center gap-3"><CreditCardIcon className="h-6 w-6 text-purple-600"/><p className="font-bold">Cartão de Crédito</p></div>
-                {selectedPayment === 'card' && <CheckIcon className="h-5 w-5 text-purple-600" />}
-              </button>
-              {formError && <p className="text-red-500 text-sm mt-2">{formError}</p>}
+            <div className="space-y-6 animate-fade-in">
+              <h3 className="font-black text-lg text-gray-900 mb-4">Como deseja pagar?</h3>
+              <div className="space-y-3">
+                <button onClick={() => setSelectedPayment('balance')} className={`w-full flex items-center justify-between p-5 border-2 rounded-2xl transition-all ${selectedPayment === 'balance' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 bg-blue-600 text-white rounded-xl"><BanknotesIcon className="h-6 w-6" /></div>
+                     <div className="text-left"><p className="font-black text-gray-900">Carteira CyBerPhone</p><p className="text-[10px] text-gray-400 font-black uppercase">Saldo: ${(currentUser.balance || 0).toFixed(2)}</p></div>
+                  </div>
+                  {selectedPayment === 'balance' && <CheckIcon className="h-6 w-6 text-blue-600" />}
+                </button>
+                <button onClick={() => setSelectedPayment('pix')} className={`w-full flex items-center justify-between p-5 border-2 rounded-2xl transition-all ${selectedPayment === 'pix' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 bg-green-500 text-white rounded-xl"><QrCodeIcon className="h-6 w-6" /></div>
+                     <div className="text-left"><p className="font-black text-gray-900">Pix Instantâneo</p><p className="text-[10px] text-gray-400 font-black uppercase">Aprovação imediata</p></div>
+                  </div>
+                  {selectedPayment === 'pix' && <CheckIcon className="h-6 w-6 text-green-600" />}
+                </button>
+                <button onClick={() => setSelectedPayment('card')} className={`w-full flex items-center justify-between p-5 border-2 rounded-2xl transition-all ${selectedPayment === 'card' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 bg-purple-600 text-white rounded-xl"><CreditCardIcon className="h-6 w-6" /></div>
+                     <div className="text-left"><p className="font-black text-gray-900">Cartão de Crédito</p><p className="text-[10px] text-gray-400 font-black uppercase">Até 12x sem juros</p></div>
+                  </div>
+                  {selectedPayment === 'card' && <CheckIcon className="h-6 w-6 text-purple-600" />}
+                </button>
+              </div>
+              {formError && <p className="text-red-500 text-sm font-bold bg-red-50 p-4 rounded-xl border border-red-100">{formError}</p>}
             </div>
           )}
 
           {view === 'processing' && (
-            <div className="text-center py-12">
-              <ArrowPathIcon className="h-16 w-16 text-blue-500 animate-spin mx-auto mb-4" />
-              <h3 className="text-xl font-bold">Finalizando pedido...</h3>
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+              <div className="relative">
+                 <div className="w-24 h-24 border-8 border-blue-50 rounded-full"></div>
+                 <div className="absolute inset-0 border-8 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <div>
+                 <h3 className="text-2xl font-black text-gray-900">Processando Pedido</h3>
+                 <p className="text-gray-400 font-bold text-sm mt-2">Estamos validando sua transação com segurança...</p>
+              </div>
             </div>
           )}
 
           {view === 'success' && (
-            <div className="text-center py-8">
-              <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-fade-in">
+              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center animate-bounce">
                 <CheckIcon className="h-12 w-12 text-green-600" />
               </div>
-              <h3 className="text-2xl font-bold">Pedido Confirmado!</h3>
-              <p className="text-gray-500 mt-2">Você receberá um e-mail com os detalhes.</p>
-              <button onClick={onClose} className="mt-8 w-full bg-black text-white py-4 rounded-2xl font-bold">Voltar para a Loja</button>
+              <div>
+                <h3 className="text-3xl font-black text-gray-900">Parabéns!</h3>
+                <p className="text-gray-500 font-medium mt-2">Seu pedido foi realizado com sucesso. Verifique seu e-mail para os detalhes de acesso.</p>
+              </div>
+              <button onClick={onClose} className="w-full bg-gray-900 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl active:scale-95 transition-all">Voltar para o App</button>
             </div>
           )}
         </div>
 
+        {/* Footer: Summary & Actions */}
         {view !== 'success' && view !== 'processing' && detailedCartItems.length > 0 && (
-          <div className="p-6 border-t bg-gray-50">
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-gray-500 font-bold uppercase tracking-widest text-xs">Total a Pagar</span>
-              <span className="text-3xl font-black">${subtotal.toFixed(2)}</span>
+          <div className="p-8 border-t border-gray-100 bg-gray-50">
+            <div className="space-y-2 mb-6">
+               <div className="flex justify-between items-center text-sm font-bold text-gray-400">
+                  <span>Subtotal</span>
+                  <span>${subtotal.toFixed(2)}</span>
+               </div>
+               <div className="flex justify-between items-center text-sm font-bold text-gray-400">
+                  <span>Taxas CyBerPhone</span>
+                  <span className="text-green-600">Grátis</span>
+               </div>
+               <div className="flex justify-between items-center pt-4">
+                  <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Total do Pedido</span>
+                  <span className="text-4xl font-black text-gray-900">${subtotal.toFixed(2)}</span>
+               </div>
             </div>
-            {view === 'cart' && <button onClick={() => setView(detailedCartItems.some(i => i.product.type === ProductType.PHYSICAL) ? 'shipping' : 'payment')} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg">Continuar</button>}
-            {view === 'shipping' && <button onClick={() => setView('payment')} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg">Ir para o Pagamento</button>}
-            {view === 'payment' && <button onClick={handleConfirmPurchase} disabled={!selectedPayment} className="w-full bg-green-600 disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold text-lg shadow-lg">Finalizar Compra</button>}
+
+            <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-tighter mb-4 justify-center">
+               <ShieldCheckIcon className="h-4 w-4 text-green-500" /> Transação Criptografada e Segura
+            </div>
+
+            {view === 'cart' && (
+              <button 
+                onClick={() => setView(detailedCartItems.some(i => i.product.type === ProductType.PHYSICAL) ? 'shipping' : 'payment')} 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95"
+              >
+                Finalizar Compra
+              </button>
+            )}
+            {view === 'shipping' && (
+              <button 
+                onClick={() => setView('payment')} 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95"
+              >
+                Escolher Pagamento
+              </button>
+            )}
+            {view === 'payment' && (
+              <button 
+                onClick={handleConfirmPurchase} 
+                disabled={!selectedPayment} 
+                className="w-full bg-black hover:bg-gray-900 disabled:bg-gray-200 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all active:scale-95"
+              >
+                Confirmar e Pagar
+              </button>
+            )}
           </div>
         )}
       </div>
+      <style>{`
+        @keyframes slide-left {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .animate-slide-left {
+          animation: slide-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
     </div>
   );
 };
