@@ -1,3 +1,4 @@
+
 import { User, Post, ChatConversation, AdCampaign, UserType, Store, Product, AffiliateSale, Comment, ShippingAddress, ProductType, AudioTrack, Notification, NotificationType, CartItem, ProductRating } from '../types';
 import { DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_ADS, DEFAULT_STORES, DEFAULT_PRODUCTS, DEFAULT_AFFILIATE_SALES, DEFAULT_PROFILE_PIC, DEFAULT_AUDIO_TRACKS } from '../constants';
 
@@ -62,7 +63,8 @@ export const loginUser = async (email: string, password: string): Promise<User> 
   throw new Error('Credenciais inválidas.');
 };
 
-export const registerUser = async (userData: Omit<User, 'id' | 'followedUsers' | 'balance'> & { password: string }): Promise<User> => {
+// Fix: Updated Omit type to include 'followers' which is generated internally
+export const registerUser = async (userData: Omit<User, 'id' | 'followedUsers' | 'followers' | 'balance'> & { password: string }): Promise<User> => {
   // TODO: Replace with actual backend API call
   console.log('Simulating registration via API for:', userData.email);
   const users = getUsers();
@@ -70,6 +72,7 @@ export const registerUser = async (userData: Omit<User, 'id' | 'followedUsers' |
     throw new Error('Email já cadastrado.');
   }
 
+  // Fix: Added missing 'followers' property to satisfy User interface
   const newUser: User = {
     id: `user-${Date.now()}`,
     userType: userData.userType,
@@ -79,6 +82,7 @@ export const registerUser = async (userData: Omit<User, 'id' | 'followedUsers' |
     phone: userData.phone,
     documentId: userData.documentId,
     followedUsers: [],
+    followers: [],
     balance: 0,
     profilePicture: userData.profilePicture || DEFAULT_PROFILE_PIC,
     credentials: userData.userType === UserType.CREATOR ? userData.credentials : undefined,

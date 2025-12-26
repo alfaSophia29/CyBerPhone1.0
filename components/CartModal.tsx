@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { CartItem, Product, User, ShippingAddress, ProductType } from '../types';
-import { findProductById, updateCartItemQuantity, removeFromCart, processProductPurchase, updateUserBalance } from '../services/storageService';
-import { XMarkIcon, PlusIcon, MinusIcon, TrashIcon, CreditCardIcon, QrCodeIcon, BanknotesIcon, ArrowPathIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { getCart, updateCartItemQuantity, removeFromCart, processProductPurchase, updateUserBalance } from '../services/storageService';
+import { XMarkIcon, PlusIcon, MinusIcon, TrashIcon, CreditCardIcon, QrCodeIcon, BanknotesIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import { CheckIcon, ShieldCheckIcon } from '@heroicons/react/24/solid';
 
 interface CartModalProps {
@@ -23,8 +23,8 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
 
   useEffect(() => {
     if (isOpen) {
-      const cart = JSON.parse(localStorage.getItem('cyberphone_cart') || '[]') as CartItem[];
-      const allProducts = JSON.parse(localStorage.getItem('cyberphone_products') || '[]') as Product[];
+      const cart = getCart();
+      const allProducts = JSON.parse(localStorage.getItem('cyber_products') || '[]') as Product[];
       setCartItems(cart);
       setProducts(allProducts);
       setView('cart');
@@ -49,13 +49,16 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
 
     setView('processing');
     setTimeout(() => {
-      if (selectedPayment === 'balance') {
-        updateUserBalance(currentUser.id, -subtotal);
+      // Pass null as affiliateId for now
+      const success = processProductPurchase(cartItems, currentUser.id, null, shippingDetails);
+      if (success) {
+        refreshUser();
+        onCartUpdate();
+        setView('success');
+      } else {
+        setFormError('Erro ao processar compra.');
+        setView('payment');
       }
-      processProductPurchase(cartItems, currentUser.id, null, shippingDetails);
-      refreshUser();
-      onCartUpdate();
-      setView('success');
     }, 2500);
   };
 
@@ -91,20 +94,23 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
               ) : (
                 <div className="space-y-4">
                   {detailedCartItems.map(item => (
-                    <div key={item.productId} className="flex gap-4 p-4 bg-gray-50 rounded-2xl group border border-transparent hover:border-gray-100 transition-all">
-                      <div className="w-20 h-20 rounded-xl overflow-hidden shadow-sm">
+                    <div key={`${item.productId}-${item.selectedColor}`} className="flex gap-4 p-4 bg-gray-50 rounded-3xl group border border-transparent hover:border-gray-100 transition-all">
+                      <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-sm shrink-0">
                         <img src={item.product.imageUrls[0]} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold text-sm text-gray-900 line-clamp-1">{item.product.name}</p>
-                        <p className="text-blue-600 font-black text-lg mt-1">${item.product.price.toFixed(2)}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                           <div className="flex items-center bg-white border border-gray-100 rounded-lg p-1 shadow-sm">
-                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity - 1); onCartUpdate(); }} className="p-1 hover:text-blue-600 transition-colors"><MinusIcon className="h-4 w-4"/></button>
+                        <p className="font-black text-sm text-gray-900 line-clamp-1 leading-tight">{item.product.name}</p>
+                        {item.selectedColor && (
+                          <p className="text-[10px] font-black text-blue-600 uppercase mt-1">Cor: {item.selectedColor}</p>
+                        )}
+                        <p className="text-gray-900 font-black text-lg mt-1">${item.product.price.toFixed(2)}</p>
+                        <div className="flex items-center justify-between mt-2">
+                           <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
+                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity - 1, item.selectedColor); onCartUpdate(); }} className="p-1.5 hover:text-blue-600 transition-colors"><MinusIcon className="h-4 w-4"/></button>
                               <span className="w-8 text-center font-black text-xs">{item.quantity}</span>
-                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity + 1); onCartUpdate(); }} className="p-1 hover:text-blue-600 transition-colors"><PlusIcon className="h-4 w-4"/></button>
+                              <button onClick={() => { updateCartItemQuantity(item.productId, item.quantity + 1, item.selectedColor); onCartUpdate(); }} className="p-1.5 hover:text-blue-600 transition-colors"><PlusIcon className="h-4 w-4"/></button>
                            </div>
-                           <button onClick={() => { removeFromCart(item.productId); onCartUpdate(); }} className="text-gray-300 hover:text-red-500 transition-colors">
+                           <button onClick={() => { removeFromCart(item.productId, item.selectedColor); onCartUpdate(); }} className="text-gray-300 hover:text-red-500 transition-colors p-2">
                               <TrashIcon className="h-5 w-5" />
                            </button>
                         </div>
@@ -150,13 +156,6 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
                   </div>
                   {selectedPayment === 'pix' && <CheckIcon className="h-6 w-6 text-green-600" />}
                 </button>
-                <button onClick={() => setSelectedPayment('card')} className={`w-full flex items-center justify-between p-5 border-2 rounded-2xl transition-all ${selectedPayment === 'card' ? 'border-blue-600 bg-blue-50 shadow-inner' : 'border-gray-50 hover:border-gray-200'}`}>
-                  <div className="flex items-center gap-4">
-                     <div className="p-3 bg-purple-600 text-white rounded-xl"><CreditCardIcon className="h-6 w-6" /></div>
-                     <div className="text-left"><p className="font-black text-gray-900">Cartão de Crédito</p><p className="text-[10px] text-gray-400 font-black uppercase">Até 12x sem juros</p></div>
-                  </div>
-                  {selectedPayment === 'card' && <CheckIcon className="h-6 w-6 text-purple-600" />}
-                </button>
               </div>
               {formError && <p className="text-red-500 text-sm font-bold bg-red-50 p-4 rounded-xl border border-red-100">{formError}</p>}
             </div>
@@ -168,86 +167,52 @@ const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, currentUser, onC
                  <div className="w-24 h-24 border-8 border-blue-50 rounded-full"></div>
                  <div className="absolute inset-0 border-8 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               </div>
-              <div>
-                 <h3 className="text-2xl font-black text-gray-900">Processando Pedido</h3>
-                 <p className="text-gray-400 font-bold text-sm mt-2">Estamos validando sua transação com segurança...</p>
-              </div>
+              <h3 className="text-2xl font-black text-gray-900">Validando Pedido</h3>
             </div>
           )}
 
           {view === 'success' && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-fade-in">
-              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center animate-bounce">
+              <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center">
                 <CheckIcon className="h-12 w-12 text-green-600" />
               </div>
-              <div>
-                <h3 className="text-3xl font-black text-gray-900">Parabéns!</h3>
-                <p className="text-gray-500 font-medium mt-2">Seu pedido foi realizado com sucesso. Verifique seu e-mail para os detalhes de acesso.</p>
-              </div>
-              <button onClick={onClose} className="w-full bg-gray-900 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl active:scale-95 transition-all">Voltar para o App</button>
+              <h3 className="text-3xl font-black text-gray-900 tracking-tighter">Pedido Confirmado!</h3>
+              <button onClick={onClose} className="w-full bg-gray-900 text-white py-5 rounded-[2rem] font-black text-lg active:scale-95 transition-all">Continuar Navegando</button>
             </div>
           )}
         </div>
 
-        {/* Footer: Summary & Actions */}
+        {/* Footer */}
         {view !== 'success' && view !== 'processing' && detailedCartItems.length > 0 && (
           <div className="p-8 border-t border-gray-100 bg-gray-50">
-            <div className="space-y-2 mb-6">
-               <div className="flex justify-between items-center text-sm font-bold text-gray-400">
-                  <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
-               </div>
-               <div className="flex justify-between items-center text-sm font-bold text-gray-400">
-                  <span>Taxas CyBerPhone</span>
-                  <span className="text-green-600">Grátis</span>
-               </div>
-               <div className="flex justify-between items-center pt-4">
-                  <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Total do Pedido</span>
+            <div className="space-y-1 mb-6">
+               <div className="flex justify-between items-center pt-2">
+                  <span className="text-xs font-black text-gray-900 uppercase tracking-widest">Total</span>
                   <span className="text-4xl font-black text-gray-900">${subtotal.toFixed(2)}</span>
                </div>
             </div>
 
-            <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-tighter mb-4 justify-center">
-               <ShieldCheckIcon className="h-4 w-4 text-green-500" /> Transação Criptografada e Segura
+            <div className="flex items-center gap-2 text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-4 justify-center">
+               <ShieldCheckIcon className="h-4 w-4 text-green-500" /> Checkout Seguro CyBer
             </div>
 
             {view === 'cart' && (
               <button 
                 onClick={() => setView(detailedCartItems.some(i => i.product.type === ProductType.PHYSICAL) ? 'shipping' : 'payment')} 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95"
+                className="w-full bg-blue-600 text-white py-5 rounded-[2.2rem] font-black text-xl shadow-xl active:scale-95 transition-all"
               >
-                Finalizar Compra
+                Prosseguir
               </button>
             )}
             {view === 'shipping' && (
-              <button 
-                onClick={() => setView('payment')} 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 transition-all active:scale-95"
-              >
-                Escolher Pagamento
-              </button>
+              <button onClick={() => setView('payment')} className="w-full bg-blue-600 text-white py-5 rounded-[2.2rem] font-black text-xl active:scale-95 transition-all">Pagamento</button>
             )}
             {view === 'payment' && (
-              <button 
-                onClick={handleConfirmPurchase} 
-                disabled={!selectedPayment} 
-                className="w-full bg-black hover:bg-gray-900 disabled:bg-gray-200 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all active:scale-95"
-              >
-                Confirmar e Pagar
-              </button>
+              <button onClick={handleConfirmPurchase} disabled={!selectedPayment} className="w-full bg-black text-white py-5 rounded-[2.2rem] font-black text-xl active:scale-95 transition-all disabled:opacity-30">Finalizar</button>
             )}
           </div>
         )}
       </div>
-      <style>{`
-        @keyframes slide-left {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slide-left {
-          animation: slide-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-      `}</style>
     </div>
   );
 };

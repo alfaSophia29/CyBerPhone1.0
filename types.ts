@@ -8,7 +8,8 @@ export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAWAL = 'WITHDRAWAL',
   PURCHASE = 'PURCHASE',
-  SALE = 'SALE'
+  SALE = 'SALE',
+  UPGRADE = 'UPGRADE'
 }
 
 export interface Transaction {
@@ -36,10 +37,13 @@ export interface User {
   phone: string;
   documentId: string;
   profilePicture?: string;
-  followedUsers: string[];
+  followedUsers: string[]; 
+  followers: string[];     
+  profileIndicatedTo?: string[];
   balance?: number;
   credentials?: string;
   bio?: string;
+  verificationFileUrl?: string; // Novo campo para comprovante PDF
   storeId?: string;
   transactions?: Transaction[];
   card?: PaymentCard;
@@ -77,6 +81,19 @@ export interface ReelDetails {
   aiEffectPrompt?: string;
 }
 
+export interface StoryItem {
+  id: string;
+  imageUrl: string;
+  timestamp: number;
+}
+
+export interface Story {
+  userId: string;
+  userName: string;
+  userProfilePic: string;
+  items: StoryItem[];
+}
+
 export interface Comment {
   id: string;
   userId: string;
@@ -93,7 +110,7 @@ export interface Post {
   authorProfilePic?: string;
   type: PostType;
   timestamp: number;
-  scheduledAt?: number; // Novo campo para agendamento
+  scheduledAt?: number;
   content?: string;
   imageUrl?: string;
   liveStream?: LiveStreamDetails;
@@ -102,6 +119,7 @@ export interface Post {
   comments: Comment[];
   shares: string[];
   saves: string[];
+  indicatedUserIds: string[]; 
   isPinned?: boolean;
   reactions?: Record<string, string[]>;
 }
@@ -113,8 +131,10 @@ export interface CyberEvent {
   title: string;
   description: string;
   dateTime: number;
+  endDateTime?: number;
   location: string;
   type: 'ONLINE' | 'PRESENTIAL';
+  isPublic: boolean;
   attendees: string[];
   imageUrl?: string;
 }
@@ -172,6 +192,7 @@ export interface Product {
   averageRating: number;
   ratingCount: number;
   affiliateLink?: string;
+  colors?: string[];
 }
 
 export interface Store {
@@ -203,6 +224,7 @@ export interface AffiliateSale {
   digitalDownloadInstructions?: string;
   isRated?: boolean;
   status: OrderStatus;
+  selectedColor?: string;
 }
 
 export enum NotificationType {
@@ -210,7 +232,15 @@ export enum NotificationType {
   COMMENT = 'COMMENT',
   NEW_FOLLOWER = 'NEW_FOLLOWER',
   AFFILIATE_SALE = 'AFFILIATE_SALE',
-  REACTION = 'REACTION'
+  REACTION = 'REACTION',
+  POST_INDICATION = 'POST_INDICATION',
+  PROFILE_RECOMMENDATION = 'PROFILE_RECOMMENDATION'
+}
+
+export interface AdLocation {
+  country: string;
+  province?: string;
+  city?: string;
 }
 
 export interface AdCampaign {
@@ -219,16 +249,19 @@ export interface AdCampaign {
   title: string;
   description: string;
   targetAudience: string;
+  locations?: AdLocation[];
   budget: number;
   isActive: boolean;
   imageUrl?: string;
   linkUrl?: string;
+  ctaText?: string;
+  placements?: string[];
   timestamp: number;
 }
 
 export interface Notification {
   id: string;
-  type: NotificationType;
+  type: NotificationType | string;
   recipientId: string;
   actorId: string;
   postId?: string;
@@ -240,4 +273,5 @@ export interface Notification {
 export interface CartItem {
   productId: string;
   quantity: number;
+  selectedColor?: string;
 }

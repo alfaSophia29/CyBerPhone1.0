@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdCampaign, User } from '../types';
-import { saveAds, getAds, updateUserBalance, findUserById } from '../services/storageService';
+import { AdCampaign, User, AdLocation } from '../types';
+import { saveAds, getAds, updateUserBalance } from '../services/storageService';
 import { generateAdCopy } from '../services/geminiService';
-import { MIN_AD_CAMPAIGN_USD_COST, KZT_TO_USD_RATE, DEFAULT_PROFILE_PIC } from '../constants';
+import { MIN_AD_CAMPAIGN_USD_COST, DEFAULT_PROFILE_PIC } from '../constants';
 import { 
   RocketLaunchIcon, 
   MegaphoneIcon, 
@@ -12,12 +12,18 @@ import {
   PhotoIcon, 
   CurrencyDollarIcon,
   ChevronRightIcon,
-  ChevronLeftIcon,
   DevicePhoneMobileIcon,
   ComputerDesktopIcon,
   SparklesIcon,
   CheckCircleIcon,
-  ClockIcon
+  MapPinIcon,
+  GlobeAltIcon,
+  XMarkIcon,
+  PlusIcon,
+  InformationCircleIcon,
+  UserGroupIcon,
+  CalendarIcon,
+  UsersIcon
 } from '@heroicons/react/24/solid';
 
 interface AdCampaignPageProps {
@@ -26,14 +32,12 @@ interface AdCampaignPageProps {
   onNavigate?: (page: string) => void;
 }
 
-type Step = 'objective' | 'creative' | 'budget';
-
 const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUser }) => {
-  const [activeStep, setActiveStep] = useState<Step>('objective');
   const [loading, setLoading] = useState(false);
   const [geminiLoading, setGeminiLoading] = useState(false);
 
   // Form State
+  const [campaignName, setCampaignName] = useState('');
   const [objective, setObjective] = useState<'traffic' | 'awareness' | 'engagement'>('traffic');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -41,13 +45,51 @@ const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUse
   const [linkUrl, setLinkUrl] = useState('');
   const [ctaText, setCtaText] = useState('Saiba Mais');
   const [targetAudience, setTargetAudience] = useState('');
-  const [budget, setBudget] = useState<number>(MIN_AD_CAMPAIGN_USD_COST);
+  const [placements, setPlacements] = useState<string[]>(['feed']);
+  
+  // Dynamic Budget State
+  const [durationDays, setDurationDays] = useState<number>(7);
+  const [dailyReachGoal, setDailyReachGoal] = useState<number>(5000);
+  
+  // Location Targeting State
+  const [targetedLocations, setTargetedLocations] = useState<AdLocation[]>([]);
+  const [locCountry, setLocCountry] = useState('');
+  const [locProvince, setLocProvince] = useState('');
+  const [locCity, setLocCity] = useState('');
 
   const [myAds, setMyAds] = useState<AdCampaign[]>([]);
+  const [previewPlacement, setPreviewPlacement] = useState<'feed' | 'sidebar'>('feed');
+
+  // CONSTANTES DE CÁLCULO (Simulação de CPM/CPC)
+  // $0.50 a cada 1000 pessoas (Educação é mais barato)
+  const COST_PER_1K_REACH = 0.50; 
+  
+  const calculatedTotalBudget = useMemo(() => {
+    const costPerDay = (dailyReachGoal / 1000) * COST_PER_1K_REACH;
+    const total = costPerDay * durationDays;
+    return Math.max(total, MIN_AD_CAMPAIGN_USD_COST);
+  }, [dailyReachGoal, durationDays]);
 
   useEffect(() => {
     setMyAds(getAds().filter(ad => ad.professorId === currentUser.id));
   }, [currentUser.id]);
+
+  const addLocation = () => {
+    if (!locCountry) return;
+    const newLoc: AdLocation = {
+      country: locCountry,
+      province: locProvince || undefined,
+      city: locCity || undefined
+    };
+    setTargetedLocations([...targetedLocations, newLoc]);
+    setLocCountry('');
+    setLocProvince('');
+    setLocCity('');
+  };
+
+  const removeLocation = (index: number) => {
+    setTargetedLocations(targetedLocations.filter((_, i) => i !== index));
+  };
 
   const handleGeminiGen = async () => {
     setGeminiLoading(true);
@@ -58,16 +100,16 @@ const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUse
     } finally {
       setGeminiLoading(false);
     }
-  };
+  }
 
   const handlePublish = () => {
-    if (!title || !description || !targetAudience) {
-      alert("Por favor, preencha as informações obrigatórias.");
+    if (!title || !description || targetedLocations.length === 0 || placements.length === 0) {
+      alert("Por favor, preencha o título, descrição, pelo menos uma localização e uma posição de exibição.");
       return;
     }
 
-    if ((currentUser.balance || 0) < budget) {
-      alert("Saldo insuficiente na carteira.");
+    if ((currentUser.balance || 0) < calculatedTotalBudget) {
+      alert("Saldo insuficiente na carteira para esta configuração de alcance/duração.");
       return;
     }
 
@@ -79,19 +121,22 @@ const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUse
         title,
         description,
         targetAudience,
-        budget,
+        locations: targetedLocations,
+        budget: calculatedTotalBudget,
         isActive: true,
-        imageUrl: imageUrl || 'https://picsum.photos/600/300',
+        imageUrl: imageUrl || 'https://picsum.photos/800/450?random=${Date.now()}',
         linkUrl: linkUrl || '#',
+        ctaText,
+        placements,
         timestamp: Date.now()
       };
 
-      updateUserBalance(currentUser.id, -budget, `Criação de Anúncio: ${title}`);
+      updateUserBalance(currentUser.id, -calculatedTotalBudget);
       const all = getAds();
       saveAds([...all, newAd]);
       setMyAds([newAd, ...myAds]);
       
-      alert("Campanha publicada com sucesso!");
+      alert(`Campanha publicada! Orçamento total de $${calculatedTotalBudget.toFixed(2)} por ${durationDays} dias.`);
       resetForm();
       setLoading(false);
       refreshUser();
@@ -99,328 +144,399 @@ const AdCampaignPage: React.FC<AdCampaignPageProps> = ({ currentUser, refreshUse
   };
 
   const resetForm = () => {
+    setCampaignName('');
     setTitle('');
     setDescription('');
     setImageUrl('');
     setLinkUrl('');
-    setActiveStep('objective');
+    setTargetAudience('');
+    setPlacements(['feed']);
+    setTargetedLocations([]);
+    setDurationDays(7);
+    setDailyReachGoal(5000);
+  };
+
+  const togglePlacement = (id: string) => {
+    setPlacements(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   const objectives = [
-    { id: 'traffic', label: 'Tráfego', icon: CursorArrowRaysIcon, desc: 'Envie alunos para seu site ou curso.' },
-    { id: 'awareness', label: 'Reconhecimento', icon: EyeIcon, desc: 'Alcance o máximo de pessoas possíveis.' },
-    { id: 'engagement', label: 'Engajamento', icon: MegaphoneIcon, desc: 'Obtenha mais curtidas e comentários.' },
+    { id: 'traffic', label: 'Tráfego', icon: CursorArrowRaysIcon },
+    { id: 'awareness', label: 'Reconhecimento', icon: EyeIcon },
+    { id: 'engagement', label: 'Engajamento', icon: MegaphoneIcon },
   ];
+
+  const placementOptions = [
+    { id: 'feed', label: 'Feed Principal', icon: DevicePhoneMobileIcon },
+    { id: 'reels', label: 'CyBer Reels', icon: ComputerDesktopIcon },
+    { id: 'sidebar', label: 'Barra Lateral', icon: ComputerDesktopIcon },
+  ];
+
+  const inputStyle = "w-full p-4 bg-gray-50 dark:bg-darkbg rounded-xl border border-gray-200 dark:border-white/10 outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm transition-all dark:text-white";
+  const labelStyle = "text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block ml-1";
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] dark:bg-[#0b0e14] pt-20 pb-24 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
         
-        {/* Header - FB Style */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        {/* Dashboard Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 bg-white dark:bg-darkcard p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5">
            <div>
-              <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tighter">Central de Anúncios CyBer</h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest mt-1">Gerencie seu alcance e vendas</p>
+              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter flex items-center gap-2">
+                <RocketLaunchIcon className="h-8 w-8 text-blue-600" />
+                Gerenciador de Anúncios CyBer
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest mt-1">Crie anúncios que geram resultados reais</p>
            </div>
-           <div className="flex items-center gap-4 bg-white dark:bg-darkcard p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+           <div className="flex items-center gap-4 bg-gray-50 dark:bg-darkbg p-3 rounded-2xl border border-gray-100 dark:border-white/10">
               <div className="text-right">
-                 <p className="text-[10px] font-black text-gray-400 uppercase">Saldo Disponível</p>
+                 <p className="text-[9px] font-black text-gray-400 uppercase">Saldo Disponível</p>
                  <p className="text-lg font-black text-blue-600">${(currentUser.balance || 0).toFixed(2)}</p>
               </div>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase shadow-lg shadow-blue-100 dark:shadow-none hover:bg-blue-700 transition-all">+ Fundos</button>
+              <button className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-100 dark:shadow-none hover:bg-blue-700 active:scale-95 transition-all">Recarregar</button>
            </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* Sidebar de Passos - Desktop */}
-          <aside className="hidden lg:block lg:col-span-3 space-y-2">
-             <div className="bg-white dark:bg-darkcard rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-white/5 sticky top-24">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6">Configuração da Campanha</p>
-                <div className="space-y-4">
-                   {[
-                     { id: 'objective', label: '1. Objetivo', icon: RocketLaunchIcon },
-                     { id: 'creative', label: '2. Criativo', icon: PhotoIcon },
-                     { id: 'budget', label: '3. Orçamento', icon: CurrencyDollarIcon },
-                   ].map(step => (
-                     <button 
-                       key={step.id}
-                       disabled={loading}
-                       onClick={() => setActiveStep(step.id as Step)}
-                       className={`w-full flex items-center gap-4 p-4 rounded-2xl font-black text-sm transition-all ${activeStep === step.id ? 'bg-blue-600 text-white shadow-xl scale-105' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'}`}
-                     >
-                       <step.icon className="h-5 w-5" />
-                       {step.label}
-                     </button>
-                   ))}
+          {/* Main Ad Creation Form */}
+          <main className="lg:col-span-8 space-y-6">
+             
+             {/* Campaign Section */}
+             <div className="bg-white dark:bg-darkcard rounded-[2rem] p-8 shadow-xl border border-gray-100 dark:border-white/5 animate-fade-in">
+                <div className="flex items-center gap-3 mb-8 border-b border-gray-50 dark:border-white/5 pb-6">
+                   <div className="bg-blue-600 text-white p-2 rounded-lg"><InformationCircleIcon className="h-5 w-5"/></div>
+                   <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">1. Detalhes da Campanha</h2>
+                </div>
+
+                <div className="space-y-6">
+                   <div>
+                      <label className={labelStyle}>Nome da Campanha (Interno)</label>
+                      <input 
+                        type="text" 
+                        value={campaignName} 
+                        onChange={e => setCampaignName(e.target.value)} 
+                        className={inputStyle} 
+                        placeholder="Ex: Campanha de Lançamento - Curso Python 2024" 
+                      />
+                   </div>
+
+                   <div>
+                      <label className={labelStyle}>Objetivo de Marketing</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                         {objectives.map(obj => (
+                           <button 
+                             key={obj.id}
+                             onClick={() => setObjective(obj.id as any)}
+                             className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${objective === obj.id ? 'border-blue-600 bg-blue-50 dark:bg-blue-600/10 text-blue-600' : 'border-gray-100 dark:border-white/5 text-gray-400'}`}
+                           >
+                              <obj.icon className="h-5 w-5" />
+                              <span className="font-black text-[10px] uppercase">{obj.label}</span>
+                           </button>
+                         ))}
+                      </div>
+                   </div>
                 </div>
              </div>
-          </aside>
 
-          {/* Área de Formulário Principal */}
-          <main className="lg:col-span-5 space-y-6">
-             
-             {/* Progress Bar Mobile */}
-             <div className="lg:hidden flex justify-between mb-4 px-2">
-                {['objective', 'creative', 'budget'].map((s, i) => (
-                   <div key={s} className={`h-2 flex-1 mx-1 rounded-full ${activeStep === s ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/10'}`}></div>
-                ))}
+             {/* Creative Section */}
+             <div className="bg-white dark:bg-darkcard rounded-[2rem] p-8 shadow-xl border border-gray-100 dark:border-white/5 animate-fade-in">
+                <div className="flex items-center gap-3 mb-8 border-b border-gray-50 dark:border-white/5 pb-6">
+                   <div className="bg-purple-600 text-white p-2 rounded-lg"><PhotoIcon className="h-5 w-5"/></div>
+                   <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">2. Criativo do Anúncio</h2>
+                </div>
+
+                <div className="space-y-6">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                         <label className={labelStyle}>Título do Anúncio</label>
+                         <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={inputStyle} placeholder="Título curto e impactante" />
+                      </div>
+                      <div>
+                         <label className={labelStyle}>Link de Destino</label>
+                         <input type="text" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} className={inputStyle} placeholder="https://seu-curso.com" />
+                      </div>
+                   </div>
+
+                   <div className="relative">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Texto Principal</label>
+                         <button onClick={handleGeminiGen} disabled={geminiLoading} className="text-[9px] font-black uppercase text-purple-600 flex items-center gap-1 hover:underline disabled:opacity-50">
+                            <SparklesIcon className="h-3 w-3" /> {geminiLoading ? 'Gerando...' : 'Melhorar com IA'}
+                         </button>
+                      </div>
+                      <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={`${inputStyle} resize-none`} placeholder="O que o público verá acima da imagem..." />
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                         <label className={labelStyle}>URL da Imagem (Upload)</label>
+                         <div className="flex gap-2">
+                           <input type="text" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className={inputStyle} placeholder="Cole o link da imagem aqui" />
+                           <button onClick={() => setImageUrl(`https://picsum.photos/800/450?random=${Date.now()}`)} className="bg-gray-100 dark:bg-darkbg p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-200 transition-all">
+                              <PhotoIcon className="h-5 w-5 text-gray-400" />
+                           </button>
+                         </div>
+                      </div>
+                      <div>
+                         <label className={labelStyle}>Botão de Chamada (CTA)</label>
+                         <select value={ctaText} onChange={e => setCtaText(e.target.value)} className={inputStyle}>
+                            <option>Saiba Mais</option>
+                            <option>Comprar Agora</option>
+                            <option>Inscrever-se</option>
+                            <option>Acessar Aula</option>
+                         </select>
+                      </div>
+                   </div>
+                </div>
              </div>
 
-             <div className="bg-white dark:bg-darkcard rounded-[2.5rem] p-8 shadow-xl border border-gray-100 dark:border-white/5">
-                
-                {/* Passo 1: Objetivo */}
-                {activeStep === 'objective' && (
-                  <div className="animate-fade-in">
-                    <h3 className="text-xl font-black mb-2 text-gray-900 dark:text-white">Qual seu objetivo hoje?</h3>
-                    <p className="text-gray-500 text-sm mb-8">Escolha a meta que melhor descreve o que você deseja alcançar.</p>
-                    <div className="space-y-4">
-                       {objectives.map(obj => (
-                         <button 
-                           key={obj.id}
-                           onClick={() => setObjective(obj.id as any)}
-                           className={`w-full flex items-center gap-5 p-5 rounded-[2rem] border-4 transition-all text-left group ${objective === obj.id ? 'border-blue-600 bg-blue-50 dark:bg-blue-600/10' : 'border-gray-50 dark:border-white/5 hover:border-gray-200'}`}
-                         >
-                            <div className={`p-4 rounded-2xl ${objective === obj.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-400'} transition-colors`}>
-                               <obj.icon className="h-7 w-7" />
+             {/* Dynamic Budget Section */}
+             <div className="bg-white dark:bg-darkcard rounded-[2rem] p-8 shadow-xl border border-gray-100 dark:border-white/5 animate-fade-in">
+                <div className="flex items-center gap-3 mb-8 border-b border-gray-50 dark:border-white/5 pb-6">
+                   <div className="bg-yellow-500 text-white p-2 rounded-lg"><CurrencyDollarIcon className="h-5 w-5"/></div>
+                   <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">3. Orçamento e Planejamento</h2>
+                </div>
+
+                <div className="space-y-12">
+                   {/* Duração */}
+                   <div className="space-y-4">
+                      <div className="flex justify-between items-end px-1">
+                         <div>
+                            <label className={labelStyle}>Duração da Campanha</label>
+                            <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+                               <CalendarIcon className="h-5 w-5 text-blue-600" />
+                               <span className="text-xl font-black">{durationDays} dias</span>
                             </div>
-                            <div>
-                               <p className="font-black text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{obj.label}</p>
-                               <p className="text-xs text-gray-500">{obj.desc}</p>
+                         </div>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase">Término: {new Date(Date.now() + durationDays * 86400000).toLocaleDateString()}</p>
+                      </div>
+                      <input 
+                        type="range" min={1} max={30} step={1} 
+                        value={durationDays} 
+                        onChange={e => setDurationDays(parseInt(e.target.value))} 
+                        className="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                      />
+                   </div>
+
+                   {/* Alcance Diário */}
+                   <div className="space-y-4">
+                      <div className="flex justify-between items-end px-1">
+                         <div>
+                            <label className={labelStyle}>Pessoas a Alcançar (Por Dia)</label>
+                            <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+                               <UsersIcon className="h-5 w-5 text-purple-600" />
+                               <span className="text-xl font-black">{dailyReachGoal.toLocaleString()} pessoas</span>
                             </div>
-                         </button>
-                       ))}
-                    </div>
-                    <button onClick={() => setActiveStep('creative')} className="w-full mt-10 bg-gray-900 dark:bg-white dark:text-black text-white py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 active:scale-95 transition-all">Continuar <ChevronRightIcon className="h-6 w-6"/></button>
-                  </div>
-                )}
+                         </div>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase">Frequência: ~1.5x</p>
+                      </div>
+                      <input 
+                        type="range" min={1000} max={100000} step={500} 
+                        value={dailyReachGoal} 
+                        onChange={e => setDailyReachGoal(parseInt(e.target.value))} 
+                        className="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                      />
+                   </div>
 
-                {/* Passo 2: Criativo */}
-                {activeStep === 'creative' && (
-                  <div className="animate-fade-in space-y-6">
-                    <h3 className="text-xl font-black text-gray-900 dark:text-white">Design do Anúncio</h3>
-                    <div className="space-y-4">
-                       <div className="relative">
-                          <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Título do Anúncio</label>
-                          <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold" placeholder="Ex: Masterclass de Física Quântica" />
-                       </div>
-                       
-                       <div className="relative">
-                          <div className="flex justify-between items-center mb-2">
-                             <label className="text-[10px] font-black text-gray-400 uppercase block ml-2">Texto Principal</label>
-                             <button onClick={handleGeminiGen} disabled={geminiLoading} className="text-[9px] font-black uppercase text-purple-600 flex items-center gap-1 hover:underline">
-                                <SparklesIcon className="h-3 w-3" /> {geminiLoading ? 'Gerando...' : 'Gerar com IA'}
-                             </button>
+                   {/* Resumo Financeiro */}
+                   <div className="bg-gray-50 dark:bg-darkbg p-8 rounded-3xl border border-gray-100 dark:border-white/5 text-center">
+                      <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">Investimento Total Estimado</p>
+                      <p className="text-6xl font-black text-gray-900 dark:text-white tracking-tighter mb-4">${calculatedTotalBudget.toFixed(2)}</p>
+                      <div className="flex justify-center gap-6 text-[10px] font-black text-gray-400 uppercase border-t border-gray-200 dark:border-white/5 pt-6 mt-6">
+                         <div className="text-center">
+                            <p className="text-gray-900 dark:text-white text-sm">${((dailyReachGoal / 1000) * COST_PER_1K_REACH).toFixed(2)}</p>
+                            <p>Custo Diário</p>
+                         </div>
+                         <div className="w-px h-8 bg-gray-200 dark:bg-white/10"></div>
+                         <div className="text-center">
+                            <p className="text-gray-900 dark:text-white text-sm">{(dailyReachGoal * durationDays).toLocaleString()}</p>
+                            <p>Alcance Total</p>
+                         </div>
+                      </div>
+                   </div>
+
+                   <button 
+                     onClick={handlePublish}
+                     disabled={loading || !title || targetedLocations.length === 0}
+                     className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-xl shadow-2xl shadow-blue-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                   >
+                     {loading ? <div className="w-8 h-8 border-4 border-white border-t-transparent animate-spin rounded-full" /> : <><RocketLaunchIcon className="h-8 w-8"/> PUBLICAR AGORA</>}
+                   </button>
+                </div>
+             </div>
+
+             {/* Targeting Section */}
+             <div className="bg-white dark:bg-darkcard rounded-[2rem] p-8 shadow-xl border border-gray-100 dark:border-white/5 animate-fade-in">
+                <div className="flex items-center gap-3 mb-8 border-b border-gray-50 dark:border-white/5 pb-6">
+                   <div className="bg-green-600 text-white p-2 rounded-lg"><UserGroupIcon className="h-5 w-5"/></div>
+                   <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">4. Localização do Público</h2>
+                </div>
+
+                <div className="space-y-8">
+                   <div>
+                      <label className={labelStyle}>Descrição do Público-Alvo</label>
+                      <input 
+                        type="text" 
+                        value={targetAudience} 
+                        onChange={e => setTargetAudience(e.target.value)} 
+                        className={inputStyle} 
+                        placeholder="Ex: Estudantes de engenharia interessados em física quântica" 
+                      />
+                   </div>
+
+                   <div className="space-y-4">
+                      <label className={labelStyle}>Localização do Rastreio</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                         <input type="text" placeholder="País" value={locCountry} onChange={e => setLocCountry(e.target.value)} className={inputStyle} />
+                         <input type="text" placeholder="Província" value={locProvince} onChange={e => setLocProvince(e.target.value)} className={inputStyle} />
+                         <input type="text" placeholder="Cidade" value={locCity} onChange={e => setLocCity(e.target.value)} className={inputStyle} />
+                      </div>
+                      <button 
+                        onClick={addLocation}
+                        disabled={!locCountry}
+                        className="w-full py-4 bg-gray-900 dark:bg-white dark:text-black text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:scale-[1.01]"
+                      >
+                        <PlusIcon className="h-5 w-5" /> Adicionar Filtro de Localização
+                      </button>
+                   </div>
+
+                   {targetedLocations.length > 0 && (
+                     <div className="flex flex-wrap gap-2 pt-2">
+                        {targetedLocations.map((loc, idx) => (
+                          <div key={idx} className="bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 px-4 py-2 rounded-full border border-blue-100 dark:border-blue-900/30 flex items-center gap-2 text-[10px] font-black">
+                             <MapPinIcon className="h-3 w-3" />
+                             {loc.country}{loc.city ? ` (${loc.city})` : ''}
+                             <button onClick={() => removeLocation(idx)}><XMarkIcon className="h-4 w-4"/></button>
                           </div>
-                          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-medium text-sm" placeholder="Escreva o que as pessoas verão primeiro..." />
-                       </div>
-
-                       <div className="relative">
-                          <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">URL da Imagem / Criativo</label>
-                          <input type="text" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold" placeholder="Link da imagem (Unsplash, Picsum...)" />
-                       </div>
-
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Link de Destino</label>
-                             <input type="text" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl outline-none font-bold text-xs" placeholder="https://..." />
-                          </div>
-                          <div>
-                             <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Texto do Botão</label>
-                             <select value={ctaText} onChange={e => setCtaText(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl outline-none font-bold text-xs appearance-none">
-                                <option>Saiba Mais</option>
-                                <option>Comprar Agora</option>
-                                <option>Inscrever-se</option>
-                                <option>Ver Perfil</option>
-                             </select>
-                          </div>
-                       </div>
-                    </div>
-                    <div className="flex gap-4 pt-4">
-                       <button onClick={() => setActiveStep('objective')} className="flex-1 bg-gray-100 dark:bg-white/5 py-4 rounded-2xl font-black text-sm uppercase text-gray-500">Voltar</button>
-                       <button onClick={() => setActiveStep('budget')} className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-black text-sm uppercase shadow-xl">Próximo Passo</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Passo 3: Orçamento */}
-                {activeStep === 'budget' && (
-                  <div className="animate-fade-in space-y-8">
-                     <div>
-                        <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">Público e Orçamento</h3>
-                        <p className="text-gray-500 text-sm">Defina para quem você quer aparecer e quanto quer investir.</p>
+                        ))}
                      </div>
+                   )}
 
-                     <div className="space-y-6">
-                        <div className="relative">
-                           <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block ml-2">Público Alvo</label>
-                           <textarea value={targetAudience} onChange={e => setTargetAudience(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold text-sm" placeholder="Ex: Estudantes de engenharia, interessados em cálculo, 18-35 anos..." />
-                        </div>
-
-                        <div className="p-6 bg-blue-50 dark:bg-blue-600/10 rounded-[2rem] border-2 border-blue-100 dark:border-blue-900/20">
-                           <div className="flex justify-between items-end mb-4">
-                              <label className="text-[10px] font-black text-blue-600 uppercase">Investimento Total (USD)</label>
-                              <p className="text-3xl font-black text-blue-600">${budget.toFixed(2)}</p>
-                           </div>
-                           <input 
-                             type="range" 
-                             min={MIN_AD_CAMPAIGN_USD_COST} 
-                             max={500} 
-                             step={5} 
-                             value={budget} 
-                             onChange={e => setBudget(parseFloat(e.target.value))} 
-                             className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                           />
-                           <div className="flex justify-between mt-2 text-[9px] font-black text-blue-300 uppercase">
-                              <span>Min: ${MIN_AD_CAMPAIGN_USD_COST}</span>
-                              <span>Max: $500</span>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl">
-                           <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                           <p className="text-xs font-bold text-gray-600 dark:text-gray-400">Alcance estimado: <span className="text-blue-600 font-black">{Math.floor(budget * 250).toLocaleString()} pessoas</span></p>
-                        </div>
-                        <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl">
-                           <ClockIcon className="h-5 w-5 text-blue-500" />
-                           <p className="text-xs font-bold text-gray-600 dark:text-gray-400">Duração: <span className="text-blue-600 font-black">7 dias úteis</span></p>
-                        </div>
-                     </div>
-
-                     <div className="flex gap-4">
-                        <button onClick={() => setActiveStep('creative')} className="flex-1 bg-gray-100 dark:bg-white/5 py-4 rounded-2xl font-black text-sm uppercase text-gray-500">Voltar</button>
-                        <button 
-                          onClick={handlePublish}
-                          disabled={loading}
-                          className="flex-[2] bg-green-600 text-white py-4 rounded-2xl font-black text-sm uppercase shadow-xl shadow-green-100 dark:shadow-none hover:bg-green-700 transition-all active:scale-95 flex items-center justify-center gap-2"
-                        >
-                          {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin rounded-full" /> : <><RocketLaunchIcon className="h-5 w-5"/> PUBLICAR ANÚNCIO</>}
-                        </button>
-                     </div>
-                  </div>
-                )}
+                   <div>
+                      <label className={labelStyle}>Plataformas de Exibição</label>
+                      <div className="flex flex-wrap gap-3">
+                         {placementOptions.map(opt => (
+                           <button 
+                             key={opt.id}
+                             onClick={() => togglePlacement(opt.id)}
+                             className={`flex-1 min-w-[120px] flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${placements.includes(opt.id) ? 'border-blue-600 bg-blue-50 dark:bg-blue-600/10 text-blue-600' : 'border-gray-50 dark:border-darkbg text-gray-400'}`}
+                           >
+                              <opt.icon className="h-6 w-6" />
+                              <span className="font-black text-[9px] uppercase">{opt.label}</span>
+                           </button>
+                         ))}
+                      </div>
+                   </div>
+                </div>
              </div>
           </main>
 
-          {/* PRÉVIA EM TEMPO REAL - Idêntica ao Feed */}
+          {/* Sidebar Preview */}
           <aside className="lg:col-span-4 space-y-6">
              <div className="sticky top-24">
-                <div className="flex items-center justify-between mb-4 px-2">
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prévia do Feed</p>
-                   <div className="flex gap-2">
-                      <DevicePhoneMobileIcon className="h-4 w-4 text-blue-600" />
-                      <ComputerDesktopIcon className="h-4 w-4 text-gray-300" />
-                   </div>
-                </div>
-
                 <div className="bg-white dark:bg-darkcard rounded-[2.5rem] shadow-2xl border-4 border-white dark:border-darkcard overflow-hidden">
-                   {/* Header do Card Simulado */}
-                   <div className="p-5 flex items-center justify-between">
+                   <div className="p-4 flex items-center justify-between border-b border-gray-50 dark:border-white/5">
                       <div className="flex items-center gap-3">
-                         <img src={currentUser.profilePicture || DEFAULT_PROFILE_PIC} className="w-10 h-10 rounded-xl object-cover" />
+                         <img src={currentUser.profilePicture || DEFAULT_PROFILE_PIC} className="w-10 h-10 rounded-xl object-cover shadow-sm" />
                          <div>
                             <p className="font-black text-xs text-gray-900 dark:text-white leading-none">{currentUser.firstName} {currentUser.lastName}</p>
-                            <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">Anúncio Patrocinado</p>
+                            <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mt-1">Patrocinado</p>
                          </div>
                       </div>
-                      <div className="flex gap-1">
-                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-                         <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setPreviewPlacement('feed')} className={`p-1.5 rounded-lg ${previewPlacement === 'feed' ? 'bg-blue-50 text-blue-600' : 'text-gray-300'}`}><DevicePhoneMobileIcon className="h-4 w-4"/></button>
+                        <button onClick={() => setPreviewPlacement('sidebar')} className={`p-1.5 rounded-lg ${previewPlacement === 'sidebar' ? 'bg-blue-50 text-blue-600' : 'text-gray-300'}`}><ComputerDesktopIcon className="h-4 w-4"/></button>
                       </div>
                    </div>
 
-                   {/* Conteúdo Simulado */}
-                   <div className="px-5 pb-3">
-                      <p className="text-xs text-gray-600 dark:text-gray-300 font-medium leading-relaxed line-clamp-3">
-                         {description || 'O texto principal do seu anúncio aparecerá aqui. Use gatilhos mentais e benefícios para o aluno.'}
+                   <div className="p-4">
+                      <p className="text-xs text-gray-700 dark:text-gray-300 font-medium leading-relaxed italic line-clamp-3">
+                        {description || 'O texto do seu anúncio aparecerá aqui para seus alunos em potencial...'}
                       </p>
                    </div>
 
-                   {/* Mídia Simulada */}
-                   <div className="bg-gray-100 dark:bg-[#1a1c24] h-52 relative overflow-hidden group">
+                   <div className="relative aspect-video bg-gray-100 dark:bg-darkbg overflow-hidden group">
                       {imageUrl ? (
-                        <img src={imageUrl} className="w-full h-full object-cover" />
+                        <img src={imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Preview" />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                           <PhotoIcon className="h-12 w-12 mb-2 opacity-20" />
-                           <p className="text-[9px] font-black uppercase tracking-widest">Seu criativo aqui</p>
+                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
+                           <PhotoIcon className="h-12 w-12 opacity-20" />
+                           <p className="text-[10px] font-black uppercase tracking-[0.2em]">Sua arte aqui</p>
                         </div>
                       )}
                       
-                      {/* Banner de CTA no Card */}
-                      <div className="absolute bottom-0 left-0 w-full bg-white/95 dark:bg-darkcard/95 backdrop-blur-md p-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
-                         <div className="flex-1 pr-4">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter truncate">{linkUrl || 'cyberphone.io/sua-oferta'}</p>
-                            <p className="text-xs font-black text-gray-900 dark:text-white truncate">{title || 'Título Chamativo'}</p>
-                         </div>
-                         <button className="bg-gray-900 dark:bg-white dark:text-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase whitespace-nowrap shadow-lg">
-                            {ctaText}
-                         </button>
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg text-[7px] font-black text-white uppercase border border-white/10">
+                         {previewPlacement === 'feed' ? 'No Feed' : 'Lateral'}
                       </div>
                    </div>
 
-                   {/* Footer Simulado */}
-                   <div className="p-4 flex items-center gap-4 border-t border-gray-50 dark:border-white/5 opacity-40 grayscale">
-                      <div className="flex items-center gap-1.5"><div className="w-4 h-4 bg-gray-200 rounded-full" /><div className="w-8 h-2 bg-gray-200 rounded-full" /></div>
-                      <div className="flex items-center gap-1.5"><div className="w-4 h-4 bg-gray-200 rounded-full" /><div className="w-8 h-2 bg-gray-200 rounded-full" /></div>
+                   <div className="p-5 bg-gray-50 dark:bg-darkbg/50 flex items-center justify-between border-t border-gray-100 dark:border-white/5">
+                      <div className="flex-1 pr-3 overflow-hidden">
+                         <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter truncate">{linkUrl || 'cyberphone.app'}</p>
+                         <p className="text-sm font-black text-gray-900 dark:text-white truncate">{title || 'Título Irresistível'}</p>
+                      </div>
+                      <button className="bg-gray-900 dark:bg-white dark:text-black text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap shadow-lg active:scale-95 transition-all">
+                         {ctaText}
+                      </button>
                    </div>
                 </div>
 
-                {/* Dicas FB Style */}
-                <div className="mt-8 bg-purple-50 dark:bg-purple-600/5 p-6 rounded-3xl border border-purple-100 dark:border-purple-900/20">
-                   <div className="flex items-center gap-2 mb-3">
-                      <SparklesIcon className="h-5 w-5 text-purple-600" />
-                      <p className="text-[10px] font-black text-purple-600 uppercase">Dica de Performance</p>
+                {/* Estimate Reach Card */}
+                <div className="mt-8 bg-gradient-to-br from-blue-600 to-indigo-800 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-[40px]"></div>
+                   <h3 className="text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <GlobeAltIcon className="h-5 w-5 text-blue-200" /> Estimativa de Alcance
+                   </h3>
+                   <div className="space-y-6 relative z-10">
+                      <div>
+                         <p className="text-3xl font-black tracking-tighter">{(dailyReachGoal * 0.9).toLocaleString()} - {(dailyReachGoal * 1.1).toLocaleString()}</p>
+                         <p className="text-[10px] font-black text-blue-200 uppercase mt-1">Pessoas alcançadas / dia</p>
+                      </div>
+                      <div>
+                         <p className="text-2xl font-black tracking-tighter">{Math.round(dailyReachGoal * 0.02).toLocaleString()} - {Math.round(dailyReachGoal * 0.05).toLocaleString()}</p>
+                         <p className="text-[10px] font-black text-blue-200 uppercase mt-1">Cliques no link / dia</p>
+                      </div>
+                      <div className="pt-4 border-t border-white/10">
+                         <p className="text-[9px] font-bold opacity-70 leading-relaxed italic">
+                           *Estimativa para {durationDays} dias com público de "{targetAudience || 'Interesse Geral'}".
+                         </p>
+                      </div>
                    </div>
-                   <p className="text-xs text-purple-800 dark:text-purple-300 font-medium leading-relaxed">
-                      "Imagens com pouco texto costumam ter 40% mais alcance no feed dos alunos. Deixe o texto denso para a descrição!"
-                   </p>
                 </div>
              </div>
           </aside>
         </div>
 
-        {/* Lista de Anúncios Existentes */}
+        {/* Existing Campaigns Section */}
         {myAds.length > 0 && (
-          <section className="mt-20">
-             <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Suas Campanhas Ativas</h2>
-                <div className="h-px flex-1 mx-8 bg-gray-200 dark:bg-white/5" />
+          <section className="mt-20 border-t border-gray-200 dark:border-white/5 pt-16">
+             <div className="flex items-center gap-3 mb-10">
+                <div className="w-1.5 h-8 bg-blue-600 rounded-full"></div>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Campanhas Ativas</h2>
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {myAds.map(ad => (
-                   <div key={ad.id} className="bg-white dark:bg-darkcard rounded-3xl p-6 border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all group">
-                      <div className="flex justify-between items-start mb-4">
+                   <div key={ad.id} className="bg-white dark:bg-darkcard rounded-[2rem] p-6 border border-gray-100 dark:border-white/5 shadow-sm group hover:shadow-xl transition-all">
+                      <div className="flex justify-between items-start mb-6">
                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 font-black">
-                               {ad.title[0]}
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 font-black">
+                               <RocketLaunchIcon className="h-6 w-6"/>
                             </div>
                             <div>
-                               <p className="font-black text-sm text-gray-900 dark:text-white line-clamp-1">{ad.title}</p>
-                               <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Veiculando Agora</p>
+                               <p className="font-black text-xs text-gray-900 dark:text-white truncate max-w-[120px]">{ad.title}</p>
+                               <span className="text-[9px] font-black text-green-600 uppercase">Ativo</span>
                             </div>
                          </div>
-                         <button className="text-gray-300 hover:text-red-500 transition-colors">
-                            <div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-1 h-1 bg-current rounded-full" />
-                         </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 my-6 py-4 border-y border-gray-50 dark:border-white/5">
-                         <div className="text-center">
-                            <p className="text-lg font-black text-gray-900 dark:text-white">{(Math.random() * 5000).toFixed(0)}</p>
-                            <p className="text-[9px] font-black text-gray-400 uppercase">Impressões</p>
-                         </div>
-                         <div className="text-center">
-                            <p className="text-lg font-black text-blue-600">${ad.budget.toFixed(2)}</p>
-                            <p className="text-[9px] font-black text-gray-400 uppercase">Investido</p>
+                         <div className="text-right">
+                            <p className="text-sm font-black text-gray-900 dark:text-white">${ad.budget.toFixed(2)}</p>
+                            <p className="text-[8px] font-black text-gray-400 uppercase">Investido</p>
                          </div>
                       </div>
-
-                      <button className="w-full py-3 bg-gray-50 dark:bg-white/5 rounded-xl text-xs font-black uppercase text-gray-500 hover:text-blue-600 transition-all">Ver Detalhes do Público</button>
+                      <button className="w-full py-3 bg-gray-50 dark:bg-darkbg rounded-xl text-[10px] font-black uppercase text-gray-500 hover:text-blue-600 transition-colors">Visualizar Resultados</button>
                    </div>
                 ))}
              </div>

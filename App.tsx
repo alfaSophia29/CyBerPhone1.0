@@ -30,12 +30,8 @@ import NotificationsPage from './components/NotificationsPage';
 import CartModal from './components/CartModal';
 import ReportUserPage from './components/ReportUserPage';
 import SettingsPage from './components/SettingsPage';
-import { requestNotificationPermission, showNotification } from './services/notificationService';
 
 type Page = 'auth' | 'feed' | 'profile' | 'chat' | 'ads' | 'live' | 'store' | 'manage-store' | 'edit-post' | 'create-post' | 'reels-page' | 'search-results' | 'notifications' | 'report-user' | 'settings';
-
-const NOTIFICATION_POLL_INTERVAL = 5000;
-const LAST_NOTIFICATION_CHECK_KEY = 'cyberphone_last_notification_check';
 
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -47,9 +43,6 @@ const App: React.FC = () => {
     const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
     const [cartItems, setCartItems] = useState<CartItem[]>(getCart());
     const [isCartModalOpen, setIsCartModalOpen] = useState(false);
-    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
-        'Notification' in window ? Notification.permission : 'denied'
-    );
 
     const toggleTheme = useCallback(() => {
         setDarkMode(prev => {
@@ -86,10 +79,7 @@ const App: React.FC = () => {
     useEffect(() => {
         refreshCurrentUser();
         refreshCart();
-        if ('Notification' in window) {
-            setNotificationPermission(Notification.permission);
-        }
-    }, []);
+    }, [refreshCurrentUser, refreshCart]);
 
     const handleLoginSuccess = useCallback((user: User) => {
         setCurrentUser(user);
@@ -97,7 +87,6 @@ const App: React.FC = () => {
         refreshCurrentUser();
         refreshCart();
         setCurrentPage('feed');
-        localStorage.removeItem(`${LAST_NOTIFICATION_CHECK_KEY}_${user.id}`);
         setUnreadNotificationsCount(0);
     }, [refreshCurrentUser, refreshCart]);
 
@@ -120,8 +109,8 @@ const App: React.FC = () => {
         window.scrollTo(0, 0);
     }, [currentUser, refreshCurrentUser]);
     
-    const handleAddToCart = (productId: string) => {
-        addToCart(productId);
+    const handleAddToCart = (productId: string, quantity: number = 1, selectedColor?: string) => {
+        addToCart(productId, quantity, selectedColor);
         refreshCart();
     };
 
@@ -153,7 +142,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-darkbg text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-darkbg text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-x-hidden">
             <Header
                 currentUser={currentUser}
                 onNavigate={handleNavigate}
@@ -162,11 +151,11 @@ const App: React.FC = () => {
                 cartItemCount={cartItemCount}
                 onOpenCart={() => setIsCartModalOpen(true)}
             />
-            <div className="flex flex-1">
+            <div className="flex flex-1 overflow-x-hidden">
                 {currentUser && (
                     <Footer currentUser={currentUser} onNavigate={handleNavigate} activePage={currentPage} />
                 )}
-                <main className={`flex-grow pt-[72px] pb-[72px] md:pb-8 transition-all duration-300 ${currentUser ? 'md:ml-64' : ''}`}>
+                <main className={`flex-grow pt-[72px] pb-[72px] md:pb-8 transition-all duration-300 ${currentUser ? 'md:ml-64 px-4 md:px-8' : 'px-0'}`}>
                     <div className="max-w-7xl mx-auto">
                         {renderPage()}
                     </div>

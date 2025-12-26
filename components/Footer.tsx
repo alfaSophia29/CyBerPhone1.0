@@ -42,7 +42,8 @@ const Footer: React.FC<FooterProps> = ({ currentUser, onNavigate, activePage }) 
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 w-full z-30 bg-white/90 dark:bg-darkcard/90 backdrop-blur-lg border-t border-gray-100 dark:border-white/10 flex justify-around items-center h-16 md:hidden px-2 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+      {/* MOBILE NAV: Refatorado para caber 7 itens sem scroll em telas de 320px+ */}
+      <nav className="fixed bottom-0 left-0 w-full z-30 bg-white/95 dark:bg-darkcard/95 backdrop-blur-xl border-t border-gray-100 dark:border-white/10 flex justify-between items-center h-16 md:hidden px-1 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
         {navItems.map((item) => {
           const isActive = activePage === item.page;
           const IconComponent = isActive ? item.SolidIcon : item.Icon;
@@ -50,19 +51,22 @@ const Footer: React.FC<FooterProps> = ({ currentUser, onNavigate, activePage }) 
             <button
               key={item.page}
               onClick={() => onNavigate(item.page)}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 relative ${isActive ? 'text-blue-600 scale-110' : 'text-gray-400 dark:text-gray-500'}`}
+              className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full transition-all duration-300 relative group ${isActive ? 'text-blue-600' : 'text-gray-400 dark:text-gray-500'}`}
               aria-label={item.name}
             >
-              <IconComponent className="h-6 w-6" />
-              {isActive && <span className="absolute -top-1 w-1 h-1 bg-blue-600 rounded-full"></span>}
+              <div className={`p-2 rounded-xl transition-all ${isActive ? 'bg-blue-50 dark:bg-blue-500/10 scale-110' : 'group-active:scale-90'}`}>
+                <IconComponent className="h-[22px] w-[22px] md:h-6 md:w-6" />
+              </div>
+              {isActive && <span className="absolute bottom-1 w-1 h-1 bg-blue-600 rounded-full"></span>}
             </button>
           );
         })}
       </nav>
 
-      <aside className="hidden md:flex flex-col fixed left-0 top-[72px] w-64 h-[calc(100vh-72px)] bg-white dark:bg-darkcard border-r border-gray-100 dark:border-white/10 z-20 overflow-y-auto p-4 custom-scrollbar shadow-[4px_0_12px_rgba(0,0,0,0.02)] transition-colors duration-300">
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden md:flex flex-col fixed left-0 top-[72px] w-64 h-[calc(100vh-72px)] bg-white dark:bg-darkcard border-r border-gray-100 dark:border-white/10 z-20 overflow-y-auto p-4 custom-scrollbar shadow-[4px_0_12px_rgba(0,0,0,0.02)]">
         <div className="space-y-2 flex-grow">
-          <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-4 ml-4">Navegação Principal</p>
+          <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-4 ml-4">Menu</p>
           {navItems.map((item) => {
             const isActive = activePage === item.page;
             const IconComponent = isActive ? item.SolidIcon : item.Icon;
@@ -86,7 +90,6 @@ const Footer: React.FC<FooterProps> = ({ currentUser, onNavigate, activePage }) 
             <ArrowRightOnRectangleIcon className="h-6 w-6" />
             Sair
           </button>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-6">&copy; {new Date().getFullYear()} CyBerPhone</p>
         </div>
       </aside>
     </>

@@ -1,10 +1,22 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, Post, Product, Store, ProductType, UserType } from '../types';
-import { getUsers, getPosts, getProducts, getStores, pinPost, unpinPost, toggleFollowUser, findUserById } from '../services/storageService';
+import { getUsers, getPosts, getProducts, getStores, toggleFollowUser, findUserById } from '../services/storageService';
 import { DEFAULT_PROFILE_PIC } from '../constants';
 import PostCard from './PostCard';
-import { BuildingStorefrontIcon, UserPlusIcon, UserMinusIcon, CheckBadgeIcon, ShoppingBagIcon, NewspaperIcon, UsersIcon, Squares2X2Icon, StarIcon } from '@heroicons/react/24/solid';
+import { 
+  BuildingStorefrontIcon, 
+  UserPlusIcon, 
+  CheckBadgeIcon, 
+  ShoppingBagIcon, 
+  NewspaperIcon, 
+  UsersIcon, 
+  Squares2X2Icon, 
+  StarIcon,
+  ChevronDownIcon,
+  FunnelIcon,
+  MagnifyingGlassIcon
+} from '@heroicons/react/24/solid';
 
 interface SearchResultsPageProps {
   currentUser: User;
@@ -13,71 +25,43 @@ interface SearchResultsPageProps {
   refreshUser: () => void;
 }
 
-type SearchTab = 'all' | 'users' | 'posts' | 'products' | 'stores';
+type SearchTab = 'all' | 'users' | 'posts' | 'products';
 
-const UserSearchResultCard: React.FC<{ 
-  user: User; 
-  currentUser: User; 
-  onNavigate: Function; 
-  onFollowToggle: Function 
-}> = ({ user, currentUser, onNavigate, onFollowToggle }) => {
+const UserResultCard: React.FC<{ user: User; currentUser: User; onNavigate: Function; onFollowToggle: Function }> = ({ user, currentUser, onNavigate, onFollowToggle }) => {
   const isFollowing = currentUser.followedUsers.includes(user.id);
   const isSelf = currentUser.id === user.id;
 
   return (
-    <div className="bg-white p-5 rounded-2xl shadow-md border border-gray-100 flex flex-col items-center text-center transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-      <div className="relative mb-3">
+    <div className="bg-white dark:bg-darkcard p-6 rounded-[2.5rem] shadow-sm border border-gray-100 dark:border-white/5 flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 w-full max-w-[320px]">
+      <div className="relative mb-4">
         <img 
           src={user.profilePicture || DEFAULT_PROFILE_PIC} 
           alt={user.firstName} 
-          className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md cursor-pointer" 
+          className="w-24 h-24 rounded-[2rem] object-cover border-4 border-white dark:border-darkcard shadow-lg cursor-pointer" 
           onClick={() => onNavigate('profile', { userId: user.id })}
         />
         {user.userType === UserType.CREATOR && (
-          <div className="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white">
+          <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-lg p-1 border-2 border-white dark:border-darkcard">
             <CheckBadgeIcon className="h-5 w-5" />
           </div>
         )}
       </div>
       
-      <h4 
-        className="font-black text-gray-900 text-lg hover:text-blue-600 cursor-pointer truncate w-full px-2"
-        onClick={() => onNavigate('profile', { userId: user.id })}
-      >
-        {user.firstName} {user.lastName}
-      </h4>
-      
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-        {user.userType === UserType.CREATOR ? 'Criador Profissional' : 'Membro Standard'}
+      <h4 className="font-black text-gray-900 dark:text-white text-lg truncate w-full mb-1">{user.firstName} {user.lastName}</h4>
+      <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-4">
+        {user.userType === UserType.CREATOR ? 'Conta Profissional' : 'Membro'}
       </p>
 
-      {user.bio && (
-        <p className="text-sm text-gray-600 line-clamp-2 mb-4 italic px-2">
-          "{user.bio}"
-        </p>
-      )}
+      {user.bio && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-6 italic leading-relaxed px-2">"{user.bio}"</p>}
 
       {!isSelf && (
         <button
           onClick={(e) => { e.stopPropagation(); onFollowToggle(user.id); }}
-          className={`mt-auto w-full py-2 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-            isFollowing 
-              ? 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 group' 
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100'
+          className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase transition-all flex items-center justify-center gap-2 ${
+            isFollowing ? 'bg-gray-100 dark:bg-white/5 text-gray-400' : 'bg-blue-600 text-white shadow-lg'
           }`}
         >
-          {isFollowing ? (
-            <>
-              <UserMinusIcon className="h-4 w-4 hidden group-hover:block" />
-              <span className="group-hover:hidden">Seguindo</span>
-              <span className="hidden group-hover:block">Deixar de seguir</span>
-            </>
-          ) : (
-            <>
-              <UserPlusIcon className="h-4 w-4" />
-              Seguir
-            </>
-          )}
+          {isFollowing ? 'Seguindo' : <><UserPlusIcon className="h-4 w-4" /> Seguir</>}
         </button>
       )}
     </div>
@@ -87,21 +71,21 @@ const UserSearchResultCard: React.FC<{
 const ProductResultCard: React.FC<{ product: Product; onNavigate: Function }> = ({ product, onNavigate }) => (
   <div 
     onClick={() => onNavigate('store', { storeId: product.storeId })}
-    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer group transform transition-all hover:shadow-xl hover:-translate-y-1"
+    className="bg-white dark:bg-darkcard rounded-[2.5rem] shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden cursor-pointer group transition-all hover:shadow-xl w-full max-w-[280px]"
   >
-    <div className="relative h-40 overflow-hidden">
-      <img src={product.imageUrls[0]} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt={product.name} />
-      <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm">
-        <span className="text-[10px] font-black uppercase text-blue-600">{product.type === ProductType.PHYSICAL ? 'Físico' : 'Digital'}</span>
+    <div className="relative h-44 overflow-hidden">
+      <img src={product.imageUrls[0]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={product.name} />
+      <div className="absolute top-3 left-3 bg-white/90 dark:bg-darkcard/90 backdrop-blur-md px-2 py-1 rounded-lg shadow-sm border border-black/5">
+        <span className="text-[8px] font-black uppercase text-blue-600">{product.type === ProductType.PHYSICAL ? 'Físico' : 'Digital'}</span>
       </div>
     </div>
-    <div className="p-4">
-      <h4 className="font-bold text-gray-900 text-sm line-clamp-1 group-hover:text-blue-600 transition-colors">{product.name}</h4>
-      <div className="flex items-center gap-1 my-1">
+    <div className="p-5">
+      <h4 className="font-black text-gray-900 dark:text-white text-sm line-clamp-1 mb-1">{product.name}</h4>
+      <div className="flex items-center gap-1 mb-3">
         <StarIcon className="h-3 w-3 text-yellow-400" />
-        <span className="text-[10px] font-bold text-gray-500">{product.averageRating.toFixed(1)} ({product.ratingCount})</span>
+        <span className="text-[10px] font-black text-gray-400">{product.averageRating.toFixed(1)}</span>
       </div>
-      <p className="text-blue-600 font-black text-lg mt-2">${product.price.toFixed(2)}</p>
+      <p className="text-blue-600 dark:text-blue-400 font-black text-xl">${product.price.toFixed(2)}</p>
     </div>
   </div>
 );
@@ -110,52 +94,34 @@ const SearchResultsPage: React.FC<SearchResultsPageProps> = ({ currentUser, quer
   const [foundUsers, setFoundUsers] = useState<User[]>([]);
   const [foundPosts, setFoundPosts] = useState<Post[]>([]);
   const [foundProducts, setFoundProducts] = useState<Product[]>([]);
-  const [foundStores, setFoundStores] = useState<Store[]>([]);
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
   const [loading, setLoading] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const performSearch = useCallback(() => {
     if (!query) return;
-
     setLoading(true);
     const lowerQuery = query.toLowerCase();
 
-    // 1. Usuários
-    const allUsers = getUsers();
-    setFoundUsers(allUsers.filter(u => 
-      `${u.firstName} ${u.lastName}`.toLowerCase().includes(lowerQuery) ||
-      u.bio?.toLowerCase().includes(lowerQuery)
-    ));
+    setFoundUsers(getUsers().filter(u => `${u.firstName} ${u.lastName}`.toLowerCase().includes(lowerQuery)));
+    setFoundPosts(getPosts().filter(p => p.content?.toLowerCase().includes(lowerQuery)));
+    setFoundProducts(getProducts().filter(p => p.name.toLowerCase().includes(lowerQuery)));
 
-    // 2. Posts
-    const allPosts = getPosts();
-    setFoundPosts(allPosts.filter(p => 
-      p.content?.toLowerCase().includes(lowerQuery) ||
-      p.authorName.toLowerCase().includes(lowerQuery) ||
-      p.reel?.title?.toLowerCase().includes(lowerQuery)
-    ).sort((a, b) => b.timestamp - a.timestamp));
-
-    // 3. Produtos (A funcionalidade pedida)
-    const allProducts = getProducts();
-    setFoundProducts(allProducts.filter(p => 
-      p.name.toLowerCase().includes(lowerQuery) ||
-      p.description.toLowerCase().includes(lowerQuery) ||
-      p.type.toLowerCase().includes(lowerQuery)
-    ));
-
-    // 4. Lojas
-    const allStores = getStores();
-    setFoundStores(allStores.filter(s =>
-      s.name.toLowerCase().includes(lowerQuery) ||
-      s.description.toLowerCase().includes(lowerQuery)
-    ));
-
-    setTimeout(() => setLoading(false), 400);
+    setTimeout(() => setLoading(false), 500);
   }, [query]);
 
+  useEffect(() => { performSearch(); }, [performSearch]);
+
   useEffect(() => {
-    performSearch();
-  }, [performSearch]);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleFollowToggle = (userId: string) => {
     toggleFollowUser(currentUser.id, userId);
@@ -163,141 +129,121 @@ const SearchResultsPage: React.FC<SearchResultsPageProps> = ({ currentUser, quer
     performSearch();
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400 font-bold animate-pulse">Explorando a CyBerPhone...</p>
-      </div>
-    );
-  }
-
-  const hasResults = foundUsers.length > 0 || foundPosts.length > 0 || foundProducts.length > 0 || foundStores.length > 0;
-
   const tabs = [
-    { id: 'all', label: 'Tudo', icon: Squares2X2Icon, count: foundUsers.length + foundPosts.length + foundProducts.length + foundStores.length },
-    { id: 'users', label: 'Pessoas', icon: UsersIcon, count: foundUsers.length },
-    { id: 'posts', label: 'Conteúdo', icon: NewspaperIcon, count: foundPosts.length },
-    { id: 'products', label: 'Produtos', icon: ShoppingBagIcon, count: foundProducts.length },
-    { id: 'stores', label: 'Lojas', icon: BuildingStorefrontIcon, count: foundStores.length },
+    { id: 'all', label: 'Todos os Resultados', icon: Squares2X2Icon, count: foundUsers.length + foundPosts.length + foundProducts.length },
+    { id: 'users', label: 'Contas Encontradas', icon: UsersIcon, count: foundUsers.length },
+    { id: 'posts', label: 'Conteúdo e Aulas', icon: NewspaperIcon, count: foundPosts.length },
+    { id: 'products', label: 'Produtos da Loja', icon: ShoppingBagIcon, count: foundProducts.length },
   ];
 
+  const currentTab = tabs.find(t => t.id === activeTab) || tabs[0];
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+      <p className="text-gray-400 font-black uppercase tracking-widest text-[10px]">Vasculhando a CyBerPhone...</p>
+    </div>
+  );
+
   return (
-    <div className="container mx-auto p-4 md:p-8 pt-24 pb-20">
-      <header className="mb-10">
-        <h2 className="text-4xl font-black text-gray-900 mb-2">Resultados da Busca</h2>
-        <p className="text-gray-500 font-medium">Você pesquisou por: <span className="text-blue-600 font-black italic">"{query}"</span></p>
+    <div className="w-full max-w-[1400px] mx-auto px-4 md:px-8 py-8 md:py-12 pt-24 flex flex-col items-center">
+      
+      <header className="mb-10 text-center flex flex-col items-center w-full">
+        <div className="bg-blue-600/10 p-4 rounded-[2rem] mb-6">
+           <MagnifyingGlassIcon className="h-8 w-8 text-blue-600" />
+        </div>
+        <h2 className="text-3xl md:text-6xl font-black text-gray-900 dark:text-white tracking-tighter mb-2">Resultados<span className="text-blue-600"></span></h2>
+        <p className="text-gray-500 font-bold uppercase tracking-widest text-[10px] md:text-xs">
+          Busca por: <span className="text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg">"{query}"</span>
+        </p>
       </header>
 
-      {/* TABS DE NAVEGAÇÃO DE BUSCA */}
-      <div className="flex overflow-x-auto gap-2 mb-8 pb-2 no-scrollbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as SearchTab)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all whitespace-nowrap ${
-              activeTab === tab.id 
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-                : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'
-            }`}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>
-              {tab.count}
-            </span>
-          </button>
-        ))}
+      <div className="relative w-full max-w-xs mb-16" ref={dropdownRef}>
+        <button
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          className="w-full flex items-center justify-between px-6 py-4 bg-white dark:bg-darkcard rounded-[1.8rem] border border-gray-100 dark:border-white/5 shadow-xl transition-all active:scale-95"
+        >
+          <div className="flex items-center gap-3">
+             <currentTab.icon className="h-5 w-5 text-blue-600" />
+             <span className="font-black text-xs uppercase tracking-widest dark:text-white">{currentTab.label}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full">{currentTab.count}</span>
+            <ChevronDownIcon className={`h-4 w-4 text-gray-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {isDropdownOpen && (
+          <div className="absolute top-full left-0 right-0 mt-3 z-[60] bg-white dark:bg-darkcard border border-gray-100 dark:border-white/5 rounded-[2rem] shadow-2xl overflow-hidden animate-fade-in py-2">
+             {tabs.map((tab) => (
+               <button
+                 key={tab.id}
+                 onClick={() => { setActiveTab(tab.id as SearchTab); setIsDropdownOpen(false); }}
+                 className={`w-full flex items-center justify-between px-6 py-4 transition-all hover:bg-gray-50 dark:hover:bg-white/5 ${
+                   activeTab === tab.id ? 'bg-blue-50 dark:bg-blue-600/10' : ''
+                 }`}
+               >
+                  <div className="flex items-center gap-4">
+                    <tab.icon className={`h-5 w-5 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`} />
+                    <span className={`font-black text-[10px] uppercase tracking-widest ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'}`}>{tab.label}</span>
+                  </div>
+                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${activeTab === tab.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-400'}`}>
+                    {tab.count}
+                  </span>
+               </button>
+             ))}
+          </div>
+        )}
       </div>
 
-      {!hasResults ? (
-        <div className="bg-white rounded-[3rem] p-16 text-center shadow-xl border border-gray-100 animate-fade-in">
-          <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Squares2X2Icon className="h-12 w-12 text-gray-300" />
-          </div>
-          <h3 className="text-2xl font-black text-gray-800">Nada encontrado</h3>
-          <p className="text-gray-500 mt-2 max-w-sm mx-auto">Tente usar termos mais genéricos ou verifique a ortografia do que você procura.</p>
+      {foundUsers.length === 0 && foundPosts.length === 0 && foundProducts.length === 0 ? (
+        <div className="text-center py-24 bg-white dark:bg-darkcard rounded-[4rem] shadow-sm border border-gray-100 dark:border-white/5 w-full max-w-4xl">
+           <Squares2X2Icon className="h-16 w-16 text-gray-200 dark:text-gray-800 mx-auto mb-6" />
+           <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Nada por aqui, ainda.</h3>
+           <p className="text-gray-500 text-sm font-medium">Tente outros termos ou verifique a ortografia.</p>
         </div>
       ) : (
-        <div className="space-y-12 animate-fade-in">
-          {/* SEÇÃO DE PRODUTOS (Ativada se Aba 'all' ou 'products') */}
-          {(activeTab === 'all' || activeTab === 'products') && foundProducts.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-8 bg-orange-500 rounded-full"></div>
-                  <h3 className="text-2xl font-black text-gray-800">Produtos em Destaque</h3>
-                </div>
-                {activeTab === 'all' && (
-                  <button onClick={() => setActiveTab('products')} className="text-blue-600 font-bold text-xs hover:underline">Ver todos</button>
-                )}
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                {foundProducts.slice(0, activeTab === 'all' ? 5 : undefined).map(product => (
-                  <ProductResultCard key={product.id} product={product} onNavigate={onNavigate} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* SEÇÃO DE USUÁRIOS */}
+        <div className="w-full space-y-24 animate-fade-in">
+          
           {(activeTab === 'all' || activeTab === 'users') && foundUsers.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-1.5 h-8 bg-blue-500 rounded-full"></div>
-                <h3 className="text-2xl font-black text-gray-800">Pessoas</h3>
+            <section className="flex flex-col items-center w-full">
+              <div className="flex items-center gap-3 mb-10">
+                <div className="w-1.5 h-8 bg-blue-600 rounded-full"></div>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Contas</h3>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {foundUsers.slice(0, activeTab === 'all' ? 4 : undefined).map(user => (
-                  <UserSearchResultCard key={user.id} user={user} currentUser={currentUser} onNavigate={onNavigate} onFollowToggle={handleFollowToggle} />
-                ))}
+              <div className="flex flex-wrap justify-center gap-6 w-full">
+                {foundUsers.map(user => <UserResultCard key={user.id} user={user} currentUser={currentUser} onNavigate={onNavigate} onFollowToggle={handleFollowToggle} />)}
               </div>
             </section>
           )}
 
-          {/* SEÇÃO DE LOJAS */}
-          {(activeTab === 'all' || activeTab === 'stores') && foundStores.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-6">
+          {(activeTab === 'all' || activeTab === 'products') && foundProducts.length > 0 && (
+            <section className="flex flex-col items-center w-full">
+              <div className="flex items-center gap-3 mb-10">
                 <div className="w-1.5 h-8 bg-green-500 rounded-full"></div>
-                <h3 className="text-2xl font-black text-gray-800">Lojas Oficiais</h3>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Marketplace</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {foundStores.slice(0, activeTab === 'all' ? 3 : undefined).map(store => {
-                  const owner = findUserById(store.professorId);
-                  return (
-                    <div key={store.id} onClick={() => onNavigate('store', { storeId: store.id })} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-lg transition-all group">
-                      <img src={owner?.profilePicture || DEFAULT_PROFILE_PIC} className="w-14 h-14 rounded-xl object-cover border-2 border-green-50" alt={store.name} />
-                      <div className="flex-1 overflow-hidden">
-                        <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate">{store.name}</h4>
-                        <p className="text-xs text-gray-400 font-bold uppercase mt-0.5">Visitar Loja &rarr;</p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 justify-items-center w-full">
+                {foundProducts.map(product => <ProductResultCard key={product.id} product={product} onNavigate={onNavigate} />)}
               </div>
             </section>
           )}
 
-          {/* SEÇÃO DE PUBLICAÇÕES */}
           {(activeTab === 'all' || activeTab === 'posts') && foundPosts.length > 0 && (
-            <section>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-1.5 h-8 bg-purple-500 rounded-full"></div>
-                <h3 className="text-2xl font-black text-gray-800">Publicações e Vídeos</h3>
+            <section className="flex flex-col items-center w-full">
+              <div className="flex items-center gap-3 mb-10">
+                <div className="w-1.5 h-8 bg-purple-600 rounded-full"></div>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Conteúdos</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {foundPosts.slice(0, activeTab === 'all' ? 6 : undefined).map(post => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    currentUser={currentUser}
-                    onNavigate={onNavigate}
-                    onFollowToggle={handleFollowToggle}
-                    refreshUser={refreshUser}
-                    onPostUpdatedOrDeleted={performSearch}
-                    onPinToggle={() => {}}
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center w-full max-w-5xl">
+                {foundPosts.map(post => (
+                  <div key={post.id} className="w-full max-w-[420px]">
+                    <PostCard
+                      post={post} currentUser={currentUser} 
+                      onNavigate={onNavigate} onFollowToggle={handleFollowToggle} 
+                      refreshUser={refreshUser} onPostUpdatedOrDeleted={performSearch} onPinToggle={() => {}}
+                    />
+                  </div>
                 ))}
               </div>
             </section>
